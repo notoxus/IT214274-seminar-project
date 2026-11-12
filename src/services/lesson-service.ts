@@ -7,8 +7,8 @@ const lessons: Lesson[] = [
     level: 'Beginner · 5 min',
     description: 'Learn a few friendly phrases for meeting someone for the first time.',
     vocabulary: [
-      { id: 'v1', word: 'pleased', pronunciation: '/pliːzd/', meaning: 'happy about something' },
-      { id: 'v2', word: 'currently', pronunciation: '/ˈkɜːrəntli/', meaning: 'at the present time' },
+      { id: 'v1', word: 'pleased', pronunciation: '/pliːzd/', meaning: 'vui, hài lòng' },
+      { id: 'v2', word: 'currently', pronunciation: '/ˈkɜːrəntli/', meaning: 'hiện tại, vào lúc này' },
     ],
 grammar: [
   { 
@@ -41,8 +41,8 @@ supplementalQuestions: [
     level: 'Beginner · 7 min',
     description: 'Talk about the things you do every day.',
     vocabulary: [
-      { id: 'v3', word: 'commute', pronunciation: '/kəˈmjuːt/', meaning: 'travel regularly to work or school'},
-      { id: 'v4', word: 'usually', pronunciation: '/ˈjuːʒuəli/', meaning: 'in most cases'},
+      { id: 'v3', word: 'commute', pronunciation: '/kəˈmjuːt/', meaning: 'đi lại hằng ngày giữa nhà và nơi làm việc hoặc trường học'},
+      { id: 'v4', word: 'usually', pronunciation: '/ˈjuːʒuəli/', meaning: 'thường, thông thường'},
     ],
     grammar: [
       { title: 'Usually + Verb (nguyên mẫu)',

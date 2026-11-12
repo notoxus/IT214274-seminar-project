@@ -13,11 +13,13 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { AppButton } from '@/components/ui/app-button';
 import { VocabularyCard } from '@/components/learn/vocabulary-card';
+import { PronunciationMic } from '@/components/learn/pronunciation-mic';
 import { GrammarPoint } from '@/components/learn/grammar-point';
 import { Screen } from '@/components/ui/screen';
 import { ThemedText } from '@/components/ui/themed-text';
 import { useTheme } from '@/hooks/use-theme';
 import { getProgress, markLessonComplete } from '@/services/storage-service';
+import { speakEnglishWord } from '@/services/speech-service';
 import {
   getLesson,
   addVocabularyToLesson,
@@ -185,7 +187,9 @@ export default function LessonScreen() {
             <View style={styles.circleGroup}>
               <TouchableOpacity
                 style={styles.circleBtn}
-                onPress={() => Alert.alert('Phát âm', `Đang đọc: ${currentVocab.word}`)}
+                accessibilityRole="button"
+                accessibilityLabel={`Phát âm ${currentVocab.word}`}
+                onPress={() => speakEnglishWord(currentVocab.word)}
               >
                 <Ionicons name="volume-high" size={18} color="#0F172A" />
               </TouchableOpacity>
@@ -201,12 +205,7 @@ export default function LessonScreen() {
               </TouchableOpacity>
             </View>
 
-            <TouchableOpacity
-              style={styles.micBtn}
-              onPress={() => Alert.alert('Luyện nói', `Hãy phát âm từ "${currentVocab.word}"`)}
-            >
-              <Ionicons name="mic" size={22} color="#0F172A" />
-            </TouchableOpacity>
+            <PronunciationMic word={currentVocab.word} size={48} buttonStyle={styles.micBtn} />
           </View>
 
           {/* 2 nút điều hướng đặc trưng của Memrise */}

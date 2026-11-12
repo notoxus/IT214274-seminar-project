@@ -191,6 +191,31 @@ export async function getPracticeReview(lessonId: string) {
   return progress.practiceReviews?.[lessonId] ?? null;
 }
 
+export async function activatePracticeReview(lessonId: string) {
+  const progress = await getProgress();
+  if (!progress.completedLessonIds.includes(lessonId)) return null;
+  progress.practiceReviews ??= {};
+  const review = progress.practiceReviews[lessonId] ?? createPracticeReview(progress.practiceQuestionAnswers ?? 0);
+  if (review.completed) {
+    review.firstPassQuestionIds = [];
+    review.firstPassCorrectIds = [];
+    review.firstPassCorrect = 0;
+    review.firstPassIncorrectIds = [];
+    review.retryQuestionIds = [];
+    review.retryCompletedIds = [];
+    review.retryDueAtQuestionCount = {};
+    review.retryGapIndexByQuestion = {};
+    review.retryBatchSize = 1;
+    review.retryBatchQuestionIds = [];
+    review.fillerCursor = 0;
+  }
+  review.active = true;
+  review.completed = false;
+  progress.practiceReviews[lessonId] = review;
+  await saveProgress(progress);
+  return review;
+}
+
 export async function recordPracticeAnswer(
   lessonId: string,
   questionId: string,

@@ -14,7 +14,7 @@ export default function AppTabs() {
         }}
       />
       <Tabs.Screen
-        name="practice/index"
+        name="practice"
         options={{
           title: 'Practice',
           tabBarIcon: ({ color, size }) => (

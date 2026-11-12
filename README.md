@@ -79,7 +79,7 @@ Start the Metro Bundler:
 npx expo start
 ```
 
-- Scan the generated QR code using the Expo Go app on your iOS or Android device.
+- Scan the generated QR code/import link manually using the Expo Go app on your iOS or Android device.
 
 #### Option A: Physical Device (Recommended for Windows & macOS)
 
@@ -92,6 +92,10 @@ npx expo start
     + Android: Expo Go app's built-in QR scanner.
 
     + iOS: Default Camera app.
+
+- And if want to other people test this app, using: `npx expo start --tunnel`
+
+- Or website: `npx expo start --web`
 
 #### Option B: Android Studio Emulator (Windows / macOS / Linux)
 
@@ -125,3 +129,47 @@ adb connect $WAYDROID_IP:5555
 ```
 
 **Launch**: Run npx expo start and press a in your terminal.
+
+## Development Build
+
+To create a development build:
+
+```bash
+npx expo run:android   # Android device or emulator (Waydroid, Bluestack, Nox,...)
+npx expo run:ios       # iOS simulator, or a physical device from a Mac
+```
+
+After that, run `npx expo start` and open the installed app instead of Expo Go. Re-run if the native dependencies or `app.json` plugins change.
+
+#### Build an installable APK (share with Android users)
+
+The `preview` profile in `eas.json` uses internal distribution, so it produces an `.apk` that installs directly on any Android device — no Play Store account needed. Cloud builds do not read the local `.env` file, so push the environment variables to EAS first (only needed once, or again whenever `.env` changes):
+
+```bash
+npx eas-cli@latest env:push preview --path .env
+npx eas-cli@latest build --platform android --profile preview
+```
+
+When the build finishes, EAS prints a download link and QR code. Download the `.apk` from that link (EAS stores the artifact; it is not committed to this repository) and share it — recipients need to allow "install unknown apps" for their browser/file manager.
+
+Do not use `--profile production` for this: that profile produces an `.aab`, which can only be uploaded to Google Play, not installed directly.
+
+#### Automated APK releases with GitHub Actions
+
+`.github/workflows/android-apk.yml` builds a preview APK on EAS whenever a `v*` tag is pushed and attaches the `.apk` to the GitHub Release.
+
+One-time setup:
+
+1. Run the manual preview build above once, so EAS creates and stores the Android keystore. The workflow runs EAS in `--non-interactive` mode and cannot generate a new keystore.
+2. Make sure the `preview` environment variables exist on EAS (`npx eas-cli@latest env:push preview --path .env`).
+3. Create an access token at [expo.dev/settings/access-tokens](https://expo.dev/settings/access-tokens).
+4. Add it as a repository secret named `EXPO_TOKEN` (GitHub → Settings → Secrets and variables → Actions).
+
+Then publish a release:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+GitHub Actions builds the APK (this uses one EAS build from the monthly quota) and uploads it to the release page, where it can be downloaded or shared as a direct link.

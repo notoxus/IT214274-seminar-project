@@ -35,9 +35,22 @@ export function AuthForm({ mode }: { mode: 'login' | 'register' }) {
     <TextInput accessibilityLabel="Email" autoCapitalize="none" autoComplete="email" keyboardType="email-address" placeholder="Email address" placeholderTextColor={palette.muted} value={email} onChangeText={setEmail} style={[styles.input, { color: palette.text, borderColor: palette.border }]} />
     <TextInput accessibilityLabel="Password" autoCapitalize="none" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} secureTextEntry placeholder="Password" placeholderTextColor={palette.muted} value={password} onChangeText={setPassword} style={[styles.input, { color: palette.text, borderColor: palette.border }]} />
     {!!error && <Text accessibilityRole="alert" style={{ color: '#C43F45' }}>{error}</Text>}
-    {busy ? <ActivityIndicator color={palette.primary} /> : <AppButton title={mode === 'login' ? 'Sign in' : 'Create account'} onPress={submit} />}
-    <Link href={mode === 'login' ? '/(auth)/register' : '/(auth)/login'} style={{ color: palette.primary, textAlign: 'center' }}>{mode === 'login' ? 'Create an account' : 'I already have an account'}</Link>
+    {busy ? (
+      <View accessibilityLiveRegion="polite" style={styles.busy}>
+        <ActivityIndicator color={palette.primary} />
+        <Text style={[styles.busyText, { color: palette.muted }]}>
+          {mode === 'login' ? 'Logging in…' : 'Creating account…'}
+        </Text>
+      </View>
+    ) : (
+      <>
+        <AppButton title={mode === 'login' ? 'Sign in' : 'Create account'} onPress={submit} />
+        <Link href={mode === 'login' ? '/(auth)/register' : '/(auth)/login'} style={{ color: palette.primary, textAlign: 'center' }}>
+          {mode === 'login' ? 'Create an account' : 'I already have an account'}
+        </Link>
+      </>
+    )}
   </View>;
 }
 
-const styles = StyleSheet.create({ form: { gap: Spacing.three }, input: { minHeight: 50, borderWidth: 1, borderRadius: 12, paddingHorizontal: Spacing.four, fontSize: 16 } });
+const styles = StyleSheet.create({ form: { gap: Spacing.three }, busy: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.two, minHeight: 48 }, busyText: { fontSize: 16 }, input: { minHeight: 50, borderWidth: 1, borderRadius: 12, paddingHorizontal: Spacing.four, fontSize: 16 } });
