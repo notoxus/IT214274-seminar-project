@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { LessonCard } from '@/components/learn/lesson-card';
@@ -13,7 +13,6 @@ import { getProgress } from '@/services/storage-service';
 
 export default function LearnScreen() {
   const theme = useTheme();
-  const router = useRouter();
   const [streakCount, setStreakCount] = useState(0);
 
   // Auto check progress in that day
@@ -64,20 +63,9 @@ export default function LearnScreen() {
         Short lessons to help you practise a little every day.
       </ThemedText>
 
-      {/* Lesson list - Đã gắn sự kiện chuyển trang */}
+      {/* Lesson list */}
       {getLessons().map((lesson) => (
-        <TouchableOpacity
-          key={lesson.id}
-          activeOpacity={0.75}
-          onPress={() =>
-            router.push({
-              pathname: '/(main)/learn/[id]',
-              params: { id: lesson.id },
-            })
-          }
-        >
-          <LessonCard lesson={lesson} />
-        </TouchableOpacity>
+        <LessonCard key={lesson.id} lesson={lesson} />
       ))}
     </Screen>
   );

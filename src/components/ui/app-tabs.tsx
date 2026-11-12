@@ -5,7 +5,7 @@ export default function AppTabs() {
   return (
     <Tabs screenOptions={{ headerShown: false, tabBarActiveTintColor: '#3568D4' }}>
       <Tabs.Screen
-        name="index"
+        name="learn"
         options={{
           title: 'Learn',
           tabBarIcon: ({ color, size }) => (
@@ -40,7 +40,6 @@ export default function AppTabs() {
           ),
         }}
       />
-      <Tabs.Screen name="learn/[id]" options={{ href: null }} />
       <Tabs.Screen name="profile/edit" options={{ href: null }} />
     </Tabs>
   );

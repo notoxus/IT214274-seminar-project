@@ -16,6 +16,7 @@ import { VocabularyCard } from '@/components/learn/vocabulary-card';
 import { GrammarPoint } from '@/components/learn/grammar-point';
 import { Screen } from '@/components/ui/screen';
 import { ThemedText } from '@/components/ui/themed-text';
+import { useTheme } from '@/hooks/use-theme';
 import { getProgress, markLessonComplete } from '@/services/storage-service';
 import {
   getLesson,
@@ -27,6 +28,7 @@ import type { Vocabulary, GrammarItem } from '@/types/lesson';
 export default function LessonScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const theme = useTheme();
   const lesson = getLesson(id);
 
   // State tiến độ hoàn thành bài học (giữ nguyên logic gốc của dự án)
@@ -63,7 +65,7 @@ export default function LessonScreen() {
     return (
       <Screen>
         <ThemedText type="title">Lesson not found</ThemedText>
-        <Link href="/(main)" style={{ color: '#5EEAD4', marginTop: 12 }}>
+        <Link href="/(main)/learn" style={{ color: '#5EEAD4', marginTop: 12 }}>
           Back to lessons
         </Link>
       </Screen>
@@ -153,21 +155,23 @@ export default function LessonScreen() {
         </TouchableOpacity>
       </View>
 
-      <Text style={styles.descriptionText}>{lesson.description}</Text>
+      <ThemedText type="small" themeColor="muted" style={styles.descriptionText}>
+        {lesson.description}
+      </ThemedText>
 
       {/* KHU VỰC HỌC TỪNG THẺ LỚN KIỂU MEMRISE */}
       {currentVocab && (
-        <View style={styles.memriseStage}>
-          <Text style={styles.stageLabel}>
+        <View style={[styles.memriseStage, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <ThemedText themeColor="muted" style={styles.stageLabel}>
             THẺ HỌC ({currentIndex + 1}/{vocabList.length})
-          </Text>
-          <Text style={styles.stageWord}>{currentVocab.word}</Text>
+          </ThemedText>
+          <ThemedText themeColor="text" style={styles.stageWord}>{currentVocab.word}</ThemedText>
           <Text style={styles.stagePronun}>{currentVocab.pronunciation}</Text>
 
           <View style={styles.stageDivider} />
 
-          <Text style={styles.stageLabel}>NGHĨA TIẾNG VIỆT</Text>
-          <Text style={styles.stageMeaning}>{currentVocab.meaning}</Text>
+          <ThemedText themeColor="muted" style={styles.stageLabel}>NGHĨA TIẾNG VIỆT</ThemedText>
+          <ThemedText themeColor="text" style={styles.stageMeaning}>{currentVocab.meaning}</ThemedText>
 
           {/* Cụm nút tròn chức năng + Nút Mic vàng giống Memrise */}
           <View style={styles.actionRow}>
@@ -244,7 +248,9 @@ export default function LessonScreen() {
           />
         ))
       ) : (
-        <Text style={styles.emptyText}>Chưa có điểm ngữ pháp nào cho bài học này.</Text>
+        <ThemedText type="small" themeColor="muted" style={styles.emptyText}>
+          Chưa có điểm ngữ pháp nào cho bài học này.
+        </ThemedText>
       )}
 
       {/* NÚT HOÀN THÀNH BÀI HỌC CÓ SẴN CỦA DỰ ÁN */}
@@ -390,7 +396,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#0F172A',
   },
   descriptionText: {
-    color: '#94A3B8',
     fontSize: 14,
     marginTop: 10,
     marginBottom: 14,
@@ -406,13 +411,12 @@ const styles = StyleSheet.create({
   stageLabel: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#94A3B8',
     letterSpacing: 1,
   },
   stageWord: {
     fontSize: 30,
+    lineHeight: 36,
     fontWeight: '800',
-    color: '#F8FAFC',
     marginTop: 4,
   },
   stagePronun: {
@@ -427,8 +431,8 @@ const styles = StyleSheet.create({
   },
   stageMeaning: {
     fontSize: 20,
+    lineHeight: 26,
     fontWeight: '600',
-    color: '#E2E8F0',
     marginTop: 4,
   },
   actionRow: {
@@ -500,7 +504,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   emptyText: {
-    color: '#64748B',
     fontStyle: 'italic',
     marginBottom: 12,
   },

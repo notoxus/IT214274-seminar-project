@@ -28,7 +28,7 @@ questions: [
   { id: 'intro-q8', type: 'multiple-choice', prompt: 'Choose a natural response to "Nice to meet you."', options: ['Nice to meet you too.', 'I am fine.', 'Goodbye.'], answer: 'Nice to meet you too.' },
   { id: 'intro-q9', type: 'fill-blank', prompt: 'Complete: "Where ___ you from?"', answer: 'are' },
   { id: 'intro-q10', type: 'true-false', prompt: 'You can say "I\'m from Vietnam" to tell someone where you are from.', answer: 'true' },
-] main
+],
   },
   {
     id: 'daily-routines',
@@ -43,9 +43,6 @@ questions: [
       { title: 'Usually + Verb (nguyên mẫu)',
         explanation: 'Dùng để diễn tả hành động xảy ra thường xuyên.',
         example: 'I usually wake up early.' },
-    ],
-    questions: [
-      { id: 'q1', prompt: 'Choose the natural sentence.', options: ['I usually wake up early.', 'I wake usually up early.', 'Usually I up wake early.'], answer: 'I usually wake up early.' }
     ],
     questions: [
       { id: 'routine-q1', type: 'multiple-choice', prompt: 'Choose the natural sentence.', options: ['I usually wake up early.', 'I wake usually up early.', 'Usually I up wake early.'], answer: 'I usually wake up early.' },
