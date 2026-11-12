@@ -46,7 +46,10 @@ export type LearningProgress = {
   // Day-based streak
   streakDays: number;
   lastActiveDate?: string; // ISO date "YYYY-MM-DD"
-
+  streakDays?: number;
+  
+  lastActiveDate?: string;
+};
 };
 
 export type PracticeReviewProgress = {
@@ -60,3 +63,4 @@ export type PracticeReviewProgress = {
   retryQuestionIds: string[];
   retryCompletedIds: string[];
 };
+

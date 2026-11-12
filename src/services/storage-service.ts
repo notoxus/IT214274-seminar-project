@@ -1,17 +1,15 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
 import { PROGRESS_STORAGE_KEY } from '@/constants/constants';
 import type { LearningProgress, PracticeReviewProgress, QuizAttempt, WrongAnswerRecord } from '@/types/statistic';
 
-const EMPTY_PROGRESS: LearningProgress = { 
-  completedLessonIds: [], 
-  completedQuizzes: 0, 
+const EMPTY_PROGRESS: LearningProgress = {
+  completedLessonIds: [],
+  completedQuizzes: 0,
   correctAnswers: 0,
   totalQuestions: 0,
   averageScore: 0,
   quizHistory: [],
   wrongAnswers: [],
-  practiceReviews: {},
   streakDays: 0,
 };
 
@@ -170,9 +168,9 @@ export async function saveQuizResultDetailed(
 ) {
   const progress = await getProgress();
 
-  // 1. Update basic counters
-  progress.completedQuizzes += 1;
-  progress.correctAnswers += (progress.correctAnswers || 0) + correctAnswers; // Hoặc gán tích lũy chuẩn
+  // 1. Update basic counters (Xử lý an toàn tránh undefined)
+  progress.completedQuizzes = (progress.completedQuizzes || 0) + 1;
+  progress.correctAnswers = (progress.correctAnswers || 0) + correctAnswers; 
   progress.totalQuestions = (progress.totalQuestions || 0) + totalQuestions;
 
   // 2. Calculate score percentage for this attempt
@@ -245,7 +243,7 @@ export async function removeWrongAnswer(questionId: string) {
   const progress = await getProgress();
   if (progress.wrongAnswers) {
     progress.wrongAnswers = progress.wrongAnswers.filter(
-      (item) => item.questionId !== questionId
+      (item: WrongAnswerRecord) => item.questionId !== questionId
     );
     await saveProgress(progress);
   }
