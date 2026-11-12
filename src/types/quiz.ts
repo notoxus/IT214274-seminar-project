@@ -1,8 +1,8 @@
 // Quiz and question models
 export type QuizQuestion =
-  | { id: string; prompt: string; type: 'multiple-choice'; options: string[]; answer: string }
-  | { id: string; prompt: string; type: 'fill-blank'; answer: string }
-  | { id: string; prompt: string; type: 'true-false'; answer: 'true' | 'false' };
+  | { id: string; prompt: string; type: 'multiple-choice'; options: string[]; answer: string; explanation?: string }
+  | { id: string; prompt: string; type: 'fill-blank'; answer: string; explanation?: string }
+  | { id: string; prompt: string; type: 'true-false'; answer: 'true' | 'false'; explanation?: string };
 
 export type QuestionType = QuizQuestion['type'];
 

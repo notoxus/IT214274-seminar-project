@@ -25,6 +25,13 @@ import {
 } from '@/services/lesson-service';
 import type { Vocabulary, GrammarItem } from '@/types/lesson';
 
+let vocabularyIdSequence = 0;
+
+function createVocabularyId() {
+  vocabularyIdSequence += 1;
+  return `v_${Date.now()}_${vocabularyIdSequence}`;
+}
+
 export default function LessonScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -99,7 +106,7 @@ export default function LessonScreen() {
         return;
       }
       const newVocab: Vocabulary = {
-        id: `v_${Date.now()}`,
+        id: createVocabularyId(),
         word: word.trim(),
         pronunciation: pronunciation.trim() || '/.../',
         meaning: meaning.trim(),

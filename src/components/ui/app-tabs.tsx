@@ -32,7 +32,7 @@ export default function AppTabs() {
         }}
       />
       <Tabs.Screen
-        name="profile/index"
+        name="profile"
         options={{
           title: 'Profile',
           tabBarIcon: ({ color, size }) => (
@@ -40,7 +40,6 @@ export default function AppTabs() {
           ),
         }}
       />
-      <Tabs.Screen name="profile/edit" options={{ href: null }} />
     </Tabs>
   );
 }

@@ -1,11 +1,12 @@
-import { useEffect, useState, useCallback } from 'react';
-import { View, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import { useState, useCallback } from 'react';
+import { View, StyleSheet } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 
 import { StatCard } from '@/components/statistic/stat-card';
 import { ProgressChart } from '@/components/statistic/progress-chart';
 import { Screen } from '@/components/ui/screen';
 import { ThemedText } from '@/components/ui/themed-text';
+import { getLessons } from '@/services/lesson-service';
 import { getProgress } from '@/services/storage-service';
 import type { LearningProgress } from '@/types/statistic';
 
@@ -38,11 +39,11 @@ export default function StatisticScreen() {
 
   return (
     <Screen>
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+      <View style={styles.container}>
         <ThemedText type="title" style={styles.title}>Your Learning Statistics</ThemedText>
 
         {/* Progress Chart / Overview */}
-        <ProgressChart completed={progress.completedLessonIds.length} total={Math.max(progress.completedLessonIds.length, 5)} />
+        <ProgressChart completed={progress.completedLessonIds.length} total={getLessons().length} />
 
         {/* Stat Cards Grid */}
         <View style={styles.row}>
@@ -68,7 +69,7 @@ export default function StatisticScreen() {
             </ThemedText>
           )}
         </View>
-      </ScrollView>
+      </View>
     </Screen>
   );
 }

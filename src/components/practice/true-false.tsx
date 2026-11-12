@@ -3,13 +3,13 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Colors, Spacing } from '@/constants/constants';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
-export function TrueFalse({ selected, onSelect }: { selected: string | null; onSelect: (answer: string) => void }) {
+export function TrueFalse({ selected, onSelect, disabled = false }: { selected: string | null; onSelect: (answer: string) => void; disabled?: boolean }) {
   const scheme = useColorScheme();
   const palette = Colors[scheme === 'dark' ? 'dark' : 'light'];
   return (
     <View style={styles.row}>
       {(['true', 'false'] as const).map((answer) => (
-        <Pressable key={answer} accessibilityRole="radio" accessibilityState={{ checked: selected === answer }} onPress={() => onSelect(answer)} style={[styles.option, { borderColor: selected === answer ? palette.primary : palette.border }]}>
+        <Pressable key={answer} disabled={disabled} accessibilityRole="radio" accessibilityState={{ checked: selected === answer, disabled }} onPress={() => onSelect(answer)} style={[styles.option, { borderColor: selected === answer ? palette.primary : palette.border }, disabled && { opacity: 0.65 }]}>
           <Text style={{ color: palette.text }}>{answer === 'true' ? 'True' : 'False'}</Text>
         </Pressable>
       ))}

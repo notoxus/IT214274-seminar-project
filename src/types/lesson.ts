@@ -22,6 +22,7 @@ export type Lesson = {
   vocabulary: Vocabulary[];
   grammar?: GrammarItem[];
   questions: QuizQuestion[];
+  supplementalQuestions?: QuizQuestion[];
 };
 
 // Re-export types for backward compatibility

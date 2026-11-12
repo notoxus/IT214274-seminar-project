@@ -1,9 +1,4 @@
-// User learning progress & statistics models
-
-
-
 export type WrongAnswerRecord = {
-
   id: string;
   lessonId: string;
   questionId: string;
@@ -13,54 +8,50 @@ export type WrongAnswerRecord = {
   selectedAnswer: string;
   attempts: number;
   lastAttemptAt: string;
-
 };
 
-
-
 export type QuizAttempt = {
-
   id: string;
   lessonId?: string;
   totalQuestions: number;
   correctAnswers: number;
   scorePercent: number;
+  stars?: number;
   completedAt: string;
-
 };
 
-
+export type PracticeReviewProgress = {
+  dueAtQuestionCount: number;
+  gapIndex: number;
+  active: boolean;
+  completed: boolean;
+  firstPassQuestionIds: string[];
+  firstPassCorrectIds: string[];
+  firstPassCorrect: number;
+  firstPassIncorrectIds: string[];
+  retryQuestionIds: string[];
+  retryCompletedIds: string[];
+  retryDueAtQuestionCount: Record<string, number>;
+  retryGapIndexByQuestion: Record<string, number>;
+  retryBatchSize: number;
+  retryBatchQuestionIds: string[];
+  fillerCursor: number;
+  lastScorePercent?: number;
+  lastStars?: number;
+  bestStars?: number;
+};
 
 export type LearningProgress = {
-
   completedLessonIds: string[];
   completedQuizzes: number;
   correctAnswers: number;
-
-  // Additional statistics
   totalQuestions?: number;
   averageScore?: number;
   quizHistory?: QuizAttempt[];
   wrongAnswers?: WrongAnswerRecord[];
   practiceReviews?: Record<string, PracticeReviewProgress>;
-  // Day-based streak
+  practiceQuestionAnswers?: number;
+  totalStars?: number;
   streakDays: number;
-  lastActiveDate?: string; // ISO date "YYYY-MM-DD"
-  streakDays?: number;
-  
   lastActiveDate?: string;
 };
-};
-
-export type PracticeReviewProgress = {
-  dueAtLessonCount: number;
-  gapIndex: number;
-  active: boolean;
-  completed: boolean;
-  firstPassQuestionIds: string[];
-  firstPassCorrect: number;
-  firstPassIncorrectIds: string[];
-  retryQuestionIds: string[];
-  retryCompletedIds: string[];
-};
-

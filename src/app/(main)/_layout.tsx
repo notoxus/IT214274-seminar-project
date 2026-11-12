@@ -1,4 +1,4 @@
-import { Redirect, Tabs } from 'expo-router';
+import { Redirect } from 'expo-router';
 
 import AppTabs from '@/components/ui/app-tabs';
 import { useAuth } from '@/hooks/use-auth';
