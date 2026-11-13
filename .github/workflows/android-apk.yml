@@ -16,7 +16,7 @@ jobs:
   build-apk:
     name: Build APK and attach to release
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 180
 
     steps:
       - name: Check out repository
