@@ -13,11 +13,11 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { AppButton } from '@/components/ui/app-button';
 import { VocabularyCard } from '@/components/learn/vocabulary-card';
+import { Flashcard, FlashcardButtons, FlashcardIconButton } from '@/components/learn/flashcard';
 import { PronunciationMic } from '@/components/learn/pronunciation-mic';
 import { GrammarPoint } from '@/components/learn/grammar-point';
 import { Screen } from '@/components/ui/screen';
 import { ThemedText } from '@/components/ui/themed-text';
-import { useTheme } from '@/hooks/use-theme';
 import { getProgress, markLessonComplete } from '@/services/storage-service';
 import { speakEnglishWord } from '@/services/speech-service';
 import {
@@ -37,7 +37,6 @@ function createVocabularyId() {
 export default function LessonScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const theme = useTheme();
   const lesson = getLesson(id);
 
   // Lesson completion state (kept from the original project logic)
@@ -180,56 +179,36 @@ export default function LessonScreen() {
 
       {/* LARGE STUDY CARD AREA, MEMRISE STYLE */}
       {currentVocab && (
-        <View style={[styles.memriseStage, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-          <ThemedText themeColor="muted" style={styles.stageLabel}>
-            THẺ HỌC ({currentIndex + 1}/{vocabList.length})
-          </ThemedText>
-          <ThemedText themeColor="text" style={styles.stageWord}>{currentVocab.word}</ThemedText>
-          <Text style={styles.stagePronun}>{currentVocab.pronunciation}</Text>
-
-          <View style={styles.stageDivider} />
-
-          <ThemedText themeColor="muted" style={styles.stageLabel}>NGHĨA TIẾNG VIỆT</ThemedText>
-          <ThemedText themeColor="text" style={styles.stageMeaning}>{currentVocab.meaning}</ThemedText>
-
+        <Flashcard
+          word={currentVocab}
+          label={`THẺ HỌC (${currentIndex + 1}/${vocabList.length})`}
+        >
           {/* Round action buttons plus the yellow mic button, Memrise style */}
           <View style={styles.actionRow}>
             <View style={styles.circleGroup}>
-              <TouchableOpacity
-                style={styles.circleBtn}
-                accessibilityRole="button"
+              <FlashcardIconButton
+                icon="volume-high"
                 accessibilityLabel={`Phát âm ${currentVocab.word}`}
                 onPress={() => speakEnglishWord(currentVocab.word)}
-              >
-                <Ionicons name="volume-high" size={18} color="#0F172A" />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.circleBtn}
+              />
+              <FlashcardIconButton
+                icon={isFavorite ? 'heart' : 'heart-outline'}
+                color={isFavorite ? '#EF4444' : '#0F172A'}
                 onPress={() => setIsFavorite(!isFavorite)}
-              >
-                <Ionicons
-                  name={isFavorite ? 'heart' : 'heart-outline'}
-                  size={18}
-                  color={isFavorite ? '#EF4444' : '#0F172A'}
-                />
-              </TouchableOpacity>
+              />
             </View>
 
             <PronunciationMic word={currentVocab.word} size={48} buttonStyle={styles.micBtn} />
           </View>
 
           {/* The two navigation buttons that are characteristic of Memrise */}
-          <View style={styles.memriseButtons}>
-            <TouchableOpacity style={styles.knownBtn} onPress={handleNextCard}>
-              <Ionicons name="checkmark-circle-outline" size={20} color="#0F172A" />
-              <Text style={styles.knownBtnText}>Tôi đã biết từ này</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.nextBtn} onPress={handleNextCard}>
-              <Text style={styles.nextBtnText}>Tiếp tục</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+          <FlashcardButtons
+            knownLabel="Tôi đã biết từ này"
+            onKnown={handleNextCard}
+            nextLabel="Tiếp tục"
+            onNext={handleNextCard}
+          />
+        </Flashcard>
       )}
 
       {/* VOCABULARY LIST (reuses the existing VocabularyCard component) */}
@@ -416,41 +395,6 @@ const styles = StyleSheet.create({
     marginTop: 10,
     marginBottom: 14,
   },
-  memriseStage: {
-    backgroundColor: '#1E293B',
-    borderRadius: 16,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: '#334155',
-    marginBottom: 20,
-  },
-  stageLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 1,
-  },
-  stageWord: {
-    fontSize: 30,
-    lineHeight: 36,
-    fontWeight: '800',
-    marginTop: 4,
-  },
-  stagePronun: {
-    fontSize: 15,
-    color: '#5EEAD4',
-    marginTop: 2,
-  },
-  stageDivider: {
-    height: 1,
-    backgroundColor: '#334155',
-    marginVertical: 14,
-  },
-  stageMeaning: {
-    fontSize: 20,
-    lineHeight: 26,
-    fontWeight: '600',
-    marginTop: 4,
-  },
   actionRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -461,14 +405,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
   },
-  circleBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: '#F8FAFC',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   micBtn: {
     width: 48,
     height: 48,
@@ -476,36 +412,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#FACC15',
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  memriseButtons: {
-    marginTop: 16,
-    gap: 10,
-  },
-  knownBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
-    paddingVertical: 12,
-    borderRadius: 10,
-    gap: 6,
-  },
-  knownBtnText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#0F172A',
-  },
-  nextBtn: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FACC15',
-    paddingVertical: 13,
-    borderRadius: 10,
-  },
-  nextBtnText: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#0F172A',
   },
   sectionHeaderRow: {
     flexDirection: 'row',

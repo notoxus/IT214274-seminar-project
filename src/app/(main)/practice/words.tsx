@@ -1,7 +1,17 @@
 import { useCallback, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import {
+  Animated,
+  PanResponder,
+  Pressable,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
+
+import { Flashcard, FlashcardIconButton } from '@/components/learn/flashcard';
 import { AppButton } from '@/components/ui/app-button';
 import { AppCard } from '@/components/ui/app-card';
 import { Screen } from '@/components/ui/screen';
@@ -14,17 +24,33 @@ import type { Vocabulary } from '@/types/lesson';
 
 type LearnedWord = { lessonTitle: string; word: Vocabulary };
 
+const SWIPE_THRESHOLD = 110;
+const FLIP_DURATION = 140;
+
 export default function LearnedWordsScreen() {
   const router = useRouter();
   const theme = useTheme();
+  const { width } = useWindowDimensions();
+
   const [words, setWords] = useState<LearnedWord[]>([]);
   const [totalWords, setTotalWords] = useState(0);
   const [index, setIndex] = useState(0);
-  const [revealed, setRevealed] = useState(false);
   const [retryWords, setRetryWords] = useState<LearnedWord[]>([]);
   const [secondPass, setSecondPass] = useState(false);
   const [finished, setFinished] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [showBack, setShowBack] = useState(false);
+
+  const [flipValue] = useState(() => new Animated.Value(0));
+  const [position] = useState(() => new Animated.ValueXY());
+  const [animating, setAnimating] = useState(false);
+
+  const resetCard = useCallback(() => {
+    flipValue.setValue(0);
+    position.setValue({ x: 0, y: 0 });
+    setAnimating(false);
+    setShowBack(false);
+  }, [flipValue, position]);
 
   useFocusEffect(useCallback(() => {
     let active = true;
@@ -35,14 +61,14 @@ export default function LearnedWordsScreen() {
       setWords(learnedWords);
       setTotalWords(learnedWords.length);
       setIndex(0);
-      setRevealed(false);
       setRetryWords([]);
       setSecondPass(false);
       setFinished(false);
+      resetCard();
       setLoading(false);
     });
     return () => { active = false; };
-  }, []));
+  }, [resetCard]));
 
   const current = words[index];
 
@@ -51,7 +77,6 @@ export default function LearnedWordsScreen() {
     if (retry && !secondPass && current) {
       setRetryWords(nextRetryWords);
     }
-    setRevealed(false);
     if (index + 1 < words.length) {
       setIndex((value) => value + 1);
     } else if (!secondPass && nextRetryWords.length > 0) {
@@ -62,7 +87,76 @@ export default function LearnedWordsScreen() {
     } else {
       setFinished(true);
     }
+    resetCard();
   };
+
+  // Turns the card edge-on, swaps the face at 90deg, then finishes the flip so
+  // the back is never shown mirrored.
+  const flipTo = (toBack: boolean) => {
+    if (animating) return;
+    setAnimating(true);
+    Animated.timing(flipValue, { toValue: 0.5, duration: FLIP_DURATION, useNativeDriver: true })
+      .start(() => {
+        setShowBack(toBack);
+        flipValue.setValue(-0.5);
+        Animated.timing(flipValue, { toValue: 0, duration: FLIP_DURATION, useNativeDriver: true })
+          .start(() => { setAnimating(false); });
+      });
+  };
+
+  const springBack = () => {
+    Animated.spring(position, {
+      toValue: { x: 0, y: 0 },
+      friction: 6,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  // dir 1 = "remembered" (swipe right), dir -1 = "review again" (swipe left).
+  const swipeAway = (dir: 1 | -1) => {
+    if (animating) return;
+    setAnimating(true);
+    Animated.timing(position, {
+      toValue: { x: dir * width * 1.4, y: 0 },
+      duration: 220,
+      useNativeDriver: true,
+    }).start(() => {
+      setAnimating(false);
+      advance(dir === -1);
+    });
+  };
+
+  const panResponder = PanResponder.create({
+    onMoveShouldSetPanResponder: (_, gesture) =>
+      showBack && !animating && Math.abs(gesture.dx) > 8 && Math.abs(gesture.dx) > Math.abs(gesture.dy),
+    onPanResponderMove: (_, gesture) => position.setValue({ x: gesture.dx, y: gesture.dy * 0.2 }),
+    onPanResponderRelease: (_, gesture) => {
+      if (gesture.dx > SWIPE_THRESHOLD) swipeAway(1);
+      else if (gesture.dx < -SWIPE_THRESHOLD) swipeAway(-1);
+      else springBack();
+    },
+    onPanResponderTerminate: springBack,
+  });
+
+  const rotate = position.x.interpolate({
+    inputRange: [-width, 0, width],
+    outputRange: ['-12deg', '0deg', '12deg'],
+    extrapolate: 'clamp',
+  });
+  const rotateY = flipValue.interpolate({
+    inputRange: [-0.5, 0, 0.5],
+    outputRange: ['-90deg', '0deg', '90deg'],
+  });
+  const knownOpacity = position.x.interpolate({
+    inputRange: [0, SWIPE_THRESHOLD],
+    outputRange: [0, 1],
+    extrapolate: 'clamp',
+  });
+  const againOpacity = position.x.interpolate({
+    inputRange: [-SWIPE_THRESHOLD, 0],
+    outputRange: [1, 0],
+    extrapolate: 'clamp',
+  });
 
   return (
     <Screen>
@@ -86,39 +180,68 @@ export default function LearnedWordsScreen() {
         </AppCard>
       ) : current ? (
         <>
-          <ThemedText type="small" themeColor="muted">
+          <ThemedText type="small" themeColor="muted" style={styles.meta}>
             {secondPass ? 'Review once more' : `${index + 1} / ${words.length}`} · {current.lessonTitle}
           </ThemedText>
-          <AppCard>
-            <View style={styles.wordRow}>
-              <View style={styles.wordCopy}>
-                <ThemedText type="title" style={styles.word}>{current.word.word}</ThemedText>
-                <ThemedText type="default" style={styles.pronunciation}>{current.word.pronunciation}</ThemedText>
-              </View>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`Play pronunciation for ${current.word.word}`}
-                onPress={() => speakEnglishWord(current.word.word)}
-                style={styles.speakerButton}
-              >
-                <Ionicons name="volume-high" size={21} color={theme.text} />
-              </Pressable>
-            </View>
-            <View style={[styles.divider, { backgroundColor: theme.border }]} />
-            {revealed ? (
-              <>
-                <ThemedText type="smallBold" themeColor="muted">NGHĨA TIẾNG VIỆT</ThemedText>
-                <ThemedText type="subtitle">{current.word.meaning}</ThemedText>
-              </>
-            ) : (
-              <AppButton title="Show meaning" onPress={() => setRevealed(true)} />
-            )}
-          </AppCard>
-          {revealed && (
+
+          <View style={styles.deck}>
+            <Animated.View
+              style={[
+                styles.cardWrap,
+                { transform: [{ translateX: position.x }, { translateY: position.y }, { rotate }] },
+              ]}
+              {...panResponder.panHandlers}
+            >
+              <Animated.View style={{ transform: [{ perspective: 900 }, { rotateY }] }}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={showBack ? 'Flip back to the Vietnamese meaning' : 'Flip the card to reveal the English word'}
+                  onPress={() => flipTo(!showBack)}
+                >
+                  {showBack ? (
+                    <Flashcard word={current.word} label={current.lessonTitle}>
+                      <View style={styles.backRow}>
+                        <FlashcardIconButton
+                          icon="volume-high"
+                          accessibilityLabel={`Play pronunciation for ${current.word.word}`}
+                          onPress={() => speakEnglishWord(current.word.word)}
+                        />
+                        <ThemedText type="small" themeColor="muted" style={styles.backHint}>
+                          Swipe right if you remembered, left to review again
+                        </ThemedText>
+                      </View>
+                    </Flashcard>
+                  ) : (
+                    <Flashcard
+                      word={current.word}
+                      face="meaning"
+                      label={current.lessonTitle}
+                      hint="Chạm để lật thẻ và xem từ tiếng Anh"
+                    />
+                  )}
+                </Pressable>
+              </Animated.View>
+
+              <Animated.View pointerEvents="none" style={[styles.badge, styles.badgeKnown, { opacity: knownOpacity }]}>
+                <Text style={styles.badgeKnownText}>NHỚ RA</Text>
+              </Animated.View>
+              <Animated.View pointerEvents="none" style={[styles.badge, styles.badgeAgain, { opacity: againOpacity }]}>
+                <Text style={styles.badgeAgainText}>ÔN LẠI</Text>
+              </Animated.View>
+            </Animated.View>
+          </View>
+
+          {showBack ? (
             <View style={styles.actions}>
-              <AppButton title={secondPass ? 'Next word' : 'I knew this word'} onPress={() => advance(false)} />
-              {!secondPass && <AppButton title="Review again" color="#A16207" onPress={() => advance(true)} />}
+              <View style={styles.actionSlot}>
+                <AppButton title="Chưa nhớ" color="#B45309" onPress={() => swipeAway(-1)} />
+              </View>
+              <View style={styles.actionSlot}>
+                <AppButton title="Nhớ ra" onPress={() => swipeAway(1)} />
+              </View>
             </View>
+          ) : (
+            <AppButton title="Lật thẻ" onPress={() => flipTo(true)} />
           )}
         </>
       ) : null}
@@ -130,11 +253,24 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   backButton: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center' },
   title: { marginTop: 15 },
-  word: { fontSize: 42, marginTop: 8 },
-  wordRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  wordCopy: { flex: 1, gap: 2 },
-  speakerButton: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F8FAFC' },
-  pronunciation: { color: '#2DD4BF', fontSize: 20 },
-  divider: { height: 1, width: '100%', marginVertical: 12 },
-  actions: { gap: 10 },
+  meta: { marginTop: 10, marginBottom: 4 },
+  deck: { marginTop: 10, marginBottom: 6, minHeight: 300, justifyContent: 'center' },
+  cardWrap: { position: 'relative' },
+  badge: {
+    position: 'absolute',
+    top: 18,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 3,
+    backgroundColor: 'rgba(15, 23, 42, 0.55)',
+  },
+  badgeKnown: { right: 16, borderColor: '#22C55E', transform: [{ rotate: '-10deg' }] },
+  badgeAgain: { left: 16, borderColor: '#F87171', transform: [{ rotate: '10deg' }] },
+  badgeKnownText: { color: '#4ADE80', fontSize: 15, fontWeight: '900', letterSpacing: 1 },
+  badgeAgainText: { color: '#F87171', fontSize: 15, fontWeight: '900', letterSpacing: 1 },
+  backRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 16 },
+  backHint: { flex: 1 },
+  actions: { flexDirection: 'row', gap: 10 },
+  actionSlot: { flex: 1 },
 });
