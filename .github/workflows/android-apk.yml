@@ -4,6 +4,16 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to create/update (e.g. v1.0.1)'
+        required: true
+        type: string
+      build_id:
+        description: 'Optional: existing EAS build ID to publish (skips starting a new build)'
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -16,7 +26,10 @@ jobs:
   build-apk:
     name: Build APK and attach to release
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    # EAS free-tier queue can be ~1h and the build itself ~15m. Give it room.
+    timeout-minutes: 240
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
 
     steps:
       - name: Check out repository
@@ -37,21 +50,74 @@ jobs:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
 
-      - name: Build APK on EAS
-        run: eas build --platform android --profile preview --non-interactive --wait --json > eas-build.json
+      # Start the build without blocking. Capturing the build id immediately means
+      # an interrupted job can be resumed instead of losing track of a running build.
+      - name: Start EAS build
+        if: ${{ github.event_name == 'push' || inputs.build_id == '' }}
+        id: start
+        run: |
+          set -euo pipefail
+          eas build --platform android --profile preview --non-interactive --no-wait --json > started.json
+          build_id=$(jq -r '.[0].id // empty' started.json)
+          if [ -z "$build_id" ]; then
+            echo "EAS did not return a build id"
+            cat started.json
+            exit 1
+          fi
+          echo "build_id=$build_id" >> "$GITHUB_OUTPUT"
+          echo "Started EAS build $build_id"
+
+      - name: Wait for EAS build
+        id: wait
+        env:
+          BUILD_ID: ${{ steps.start.outputs.build_id || inputs.build_id }}
+        run: |
+          set -euo pipefail
+          # Keep this below the job timeout so we can report a useful error first.
+          deadline=$(( $(date +%s) + 210*60 ))
+          while true; do
+            # A transient API/network error must not fail an otherwise healthy build.
+            if ! json=$(eas build:view "$BUILD_ID" --json); then
+              echo "Could not fetch status for build $BUILD_ID, retrying..."
+              sleep 30
+              continue
+            fi
+            status=$(jq -r '.status // empty' <<<"$json")
+            echo "EAS build $BUILD_ID status: $status"
+            case "$status" in
+              FINISHED)
+                echo "$json" > eas-build.json
+                echo "artifact_url=$(jq -r '.artifacts.buildUrl // empty' <<<"$json")" >> "$GITHUB_OUTPUT"
+                exit 0
+                ;;
+              ERRORED|CANCELED|PENDING_CANCEL)
+                echo "$json"
+                exit 1
+                ;;
+            esac
+            if [ "$(date +%s)" -ge "$deadline" ]; then
+              echo "Timed out waiting for EAS build $BUILD_ID"
+              exit 1
+            fi
+            sleep 60
+          done
 
       - name: Download APK artifact
+        env:
+          ARTIFACT_URL: ${{ steps.wait.outputs.artifact_url }}
         run: |
-          url=$(jq -r '.[0].artifacts.buildUrl' eas-build.json)
-          if [ -z "$url" ] || [ "$url" = "null" ]; then
+          set -euo pipefail
+          if [ -z "${ARTIFACT_URL:-}" ]; then
             echo "EAS did not return an APK download URL"
             cat eas-build.json
             exit 1
           fi
-          curl --fail --location "$url" --output "LearningEnglishApp-${GITHUB_REF_NAME}.apk"
+          curl --fail --location --retry 5 --retry-all-errors \
+            "$ARTIFACT_URL" --output "LearningEnglishApp-${RELEASE_TAG}.apk"
 
       - name: Attach APK to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ env.RELEASE_TAG }}
           files: LearningEnglishApp-*.apk
           generate_release_notes: true
