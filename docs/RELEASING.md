@@ -127,7 +127,11 @@ Do not use `--profile production` for this: that profile produces an `.aab`, whi
 To build the APK on your own machine instead of waiting for the EAS cloud queue:
 
 ```bash
-npx eas-cli@latest build --platform android --profile preview --local
+npx eas-cli@latest build \
+  --platform android \
+  --profile preview \
+  --local \
+  --output ./dist/LearningEnglishApp-v1.0.0.apk
 ```
 
 - Requires the Android SDK and JDK locally (the same toolchain that `npx expo run:android` uses).
@@ -139,10 +143,10 @@ npx eas-cli@latest build --platform android --profile preview --local
 
 ```bash
 # attach the APK to a (new) release
-gh release upload v1.0.1 LearningEnglishApp-v1.0.1.apk
+gh release upload v1.0.1 dist/LearningEnglishApp-v1.0.1.apk
 
 # replace an existing asset in place — same tag, same download URL
-gh release upload v1.0.0 LearningEnglishApp-v1.0.0.apk --clobber
+gh release upload v1.0.0 dist/LearningEnglishApp-v1.0.0.apk --clobber
 ```
 
 `--clobber` overwrites the asset without creating a new release. Remember that a tag points at a commit, so replacing the APK on an old tag leaves the release source and the APK out of sync — prefer a new tag when the APK contains new commits.
