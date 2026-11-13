@@ -106,8 +106,8 @@ gh run watch
 ### After the build
 
 - Download new release: `https://github.com/notoxus/IT214274-seminar-project/releases/tag/vX.Y.Z`
-- [ ] Uninstall the previous build and install the new APK (see [Installing the APK](#installing-the-apk)).
-- [ ] Sign in on the device and check that progress, streak and custom vocabulary/grammar are restored (requires Cloud Firestore to be enabled — see the README section "Where learning data is stored").
+- Uninstall the previous build and install the new APK (see [Installing the APK](#installing-the-apk)).
+- Sign in on the device and check that progress, streak and custom vocabulary/grammar are restored (requires Cloud Firestore to be enabled — see the README section "Where learning data is stored").
 
 ## Manual APK build
 
@@ -142,7 +142,7 @@ npx eas-cli@latest build --platform android --profile preview --local
 gh release upload v1.0.1 LearningEnglishApp-v1.0.1.apk
 
 # replace an existing asset in place — same tag, same download URL
-gh release upload v1.0.0 LearningEnglishApp.apk --clobber
+gh release upload v1.0.0 LearningEnglishApp-v1.0.0.apk --clobber
 ```
 
 `--clobber` overwrites the asset without creating a new release. Remember that a tag points at a commit, so replacing the APK on an old tag leaves the release source and the APK out of sync — prefer a new tag when the APK contains new commits.
