@@ -32,11 +32,9 @@ export default function LearnedWordsScreen() {
   const theme = useTheme();
   const { width } = useWindowDimensions();
 
-  const [words, setWords] = useState<LearnedWord[]>([]);
-  const [totalWords, setTotalWords] = useState(0);
-  const [index, setIndex] = useState(0);
-  const [retryWords, setRetryWords] = useState<LearnedWord[]>([]);
-  const [secondPass, setSecondPass] = useState(false);
+  const [allWords, setAllWords] = useState<LearnedWord[]>([]);
+  const [deck, setDeck] = useState<LearnedWord[]>([]);
+  const [remembered, setRemembered] = useState(0);
   const [finished, setFinished] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showBack, setShowBack] = useState(false);
@@ -58,11 +56,9 @@ export default function LearnedWordsScreen() {
       if (!active) return;
       const completed = getLessons().filter((lesson) => progress.completedLessonIds.includes(lesson.id));
       const learnedWords = completed.flatMap((lesson) => lesson.vocabulary.map((word) => ({ lessonTitle: lesson.title, word })));
-      setWords(learnedWords);
-      setTotalWords(learnedWords.length);
-      setIndex(0);
-      setRetryWords([]);
-      setSecondPass(false);
+      setAllWords(learnedWords);
+      setDeck(learnedWords);
+      setRemembered(0);
       setFinished(false);
       resetCard();
       setLoading(false);
@@ -70,23 +66,28 @@ export default function LearnedWordsScreen() {
     return () => { active = false; };
   }, [resetCard]));
 
-  const current = words[index];
+  const current = deck[0];
 
-  const advance = (retry: boolean) => {
-    const nextRetryWords = retry && !secondPass && current ? [...retryWords, current] : retryWords;
-    if (retry && !secondPass && current) {
-      setRetryWords(nextRetryWords);
+  // Right swipe removes the word from the queue; left swipe sends it to the
+  // back so another card comes up and the word returns later. The session ends
+  // only when every word has been remembered at least once.
+  const advance = (wasRemembered: boolean) => {
+    if (!current) return;
+    if (wasRemembered) {
+      const rest = deck.slice(1);
+      setDeck(rest);
+      setRemembered((value) => value + 1);
+      if (rest.length === 0) setFinished(true);
+    } else if (deck.length > 1) {
+      setDeck([...deck.slice(1), current]);
     }
-    if (index + 1 < words.length) {
-      setIndex((value) => value + 1);
-    } else if (!secondPass && nextRetryWords.length > 0) {
-      setWords(nextRetryWords);
-      setRetryWords([]);
-      setSecondPass(true);
-      setIndex(0);
-    } else {
-      setFinished(true);
-    }
+    resetCard();
+  };
+
+  const replay = () => {
+    setDeck(allWords);
+    setRemembered(0);
+    setFinished(false);
     resetCard();
   };
 
@@ -122,7 +123,7 @@ export default function LearnedWordsScreen() {
       useNativeDriver: true,
     }).start(() => {
       setAnimating(false);
-      advance(dir === -1);
+      advance(dir === 1);
     });
   };
 
@@ -167,7 +168,7 @@ export default function LearnedWordsScreen() {
         <ThemedText type="title" style={styles.title}>Word review</ThemedText>
       </View>
 
-      {loading ? null : words.length === 0 ? (
+      {loading ? null : allWords.length === 0 ? (
         <AppCard>
           <ThemedText type="subtitle">No learned words yet</ThemedText>
           <ThemedText type="default" themeColor="muted">Complete a lesson in Learn to add its vocabulary cards here.</ThemedText>
@@ -175,13 +176,14 @@ export default function LearnedWordsScreen() {
       ) : finished ? (
         <AppCard>
           <ThemedText type="subtitle">Review complete</ThemedText>
-          <ThemedText type="default" themeColor="muted">You reviewed {totalWords} learned word(s).</ThemedText>
-          <AppButton title="Back to Practice" onPress={() => router.back()} />
+          <ThemedText type="default" themeColor="muted">You remembered all {allWords.length} word(s).</ThemedText>
+          <AppButton title="Replay" onPress={replay} />
+          <AppButton title="Back to Practice" color="#334155" onPress={() => router.back()} />
         </AppCard>
       ) : current ? (
         <>
           <ThemedText type="small" themeColor="muted" style={styles.meta}>
-            {secondPass ? 'Review once more' : `${index + 1} / ${words.length}`} · {current.lessonTitle}
+            {remembered} / {allWords.length} remembered · {deck.length} left · {current.lessonTitle}
           </ThemedText>
 
           <View style={styles.deck}>
