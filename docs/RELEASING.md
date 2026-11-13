@@ -23,71 +23,89 @@ Everything about building, tagging and publishing the installable `.apk` lives h
 4. Add it as a repository secret named `EXPO_TOKEN` (GitHub → Settings → Secrets and variables → Actions).
 5. Authenticate the GitHub CLI once on your machine: `gh auth login`.
 
-## Release checklist
-
-Use this for every release. The order matters: the tag is what CI builds from, so it must point at the commit you want to ship.
+## Release instruction:
 
 ### Before tagging
 
-- [ ] Changes are committed and pushed to `main` (`git status` is clean).
-- [ ] You are on the commit you want to release:
+- Finish and push the fix on `main` first.
 
-  ```bash
-  git checkout main
-  git pull
-  git log -1 --oneline
-  ```
+```bash
+git status                 # must be clean
+git push origin main
+```
+### Delete tag, when you wouldn't like create that new
 
-- [ ] Typecheck, lint and bundle pass:
+- Delete the GitHub Release and its tag (this also removes the old APK):
 
-  ```bash
-  npx tsc --noEmit
-  npx expo lint
-  npx expo export --platform android --output-dir /tmp/opencode/export-test
-  ```
+```bash
+gh release delete v1.0.0 --yes --cleanup-tag
+```
 
-- [ ] `version` in `app.json` and `package.json` matches the tag you are about to create.
+- Recreate the local tag on the current commit and push it:
+
+```bash
+git tag -d v1.0.0          
+git tag v1.0.0             
+git push origin v1.0.0     
+```
+
+- Verify both ends point at the same commit:
+
+```bash
+git rev-list -n1 v1.0.0    # local
+git ls-remote --tags origin v1.0.0
+```
+
+- Watch the new run and confirm the asset was replaced:
+
+```bash
+gh run list --workflow=android-apk.yml --limit 3
+gh release view v1.0.0
+```
+
+- Typecheck, lint and bundle pass:
+
+```bash
+npx tsc --noEmit
+npx expo lint
+npx expo export --platform android --output-dir /tmp/opencode/export-test
+```
+
+- `version` in `app.json` and `package.json` matches the tag you are about to create.
 
 ### Tag and push
 
-- [ ] Create the tag on the current commit and push it (pushing the tag is what starts CI):
+- Create the tag on the current commit and push it (pushing the tag is what starts CI):
 
-  ```bash
-  git tag v1.0.0
-  git push origin v1.0.0
-  ```
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
 
-- [ ] Confirm the remote tag points at the release commit:
+- Confirm the remote tag points at the release commit:
 
-  ```bash
-  git rev-list -n1 v1.0.0     # should equal: git rev-parse HEAD
-  git ls-remote --tags origin v1.0.0
-  ```
+```bash
+git rev-list -n1 v1.0.0     # should equal: git rev-parse HEAD
+git ls-remote --tags origin v1.0.0
+```
 
 ### Watch the build
 
-- [ ] Find the run that the tag triggered:
+- Find the run that the tag triggered:
 
-  ```bash
-  gh run list --workflow=android-apk.yml --limit 3
-  ```
+```bash
+gh run list --workflow=android-apk.yml --limit 3
+```
 
-- [ ] Follow it until it finishes (usually 15–75 minutes, depending on the EAS queue):
+- Follow it until it finishes (usually 15–75 minutes, depending on the EAS queue):
 
-  ```bash
-  gh run watch
-  ```
+```bash
+gh run watch
+```
 
 ### After the build
 
-- [ ] The release exists and contains the APK:
-
-  ```bash
-  gh release view v1.0.0
-  gh release download v1.0.0 --pattern '*.apk' --dir /tmp/opencode
-  ```
-
-- [ ] Download link works: `https://github.com/notoxus/IT214274-seminar-project/releases/tag/v1.0.0`
+- Download new release: `https://github.com/notoxus/IT214274-seminar-project/releases/tag/vX.Y.Z`
 - [ ] Uninstall the previous build and install the new APK (see [Installing the APK](#installing-the-apk)).
 - [ ] Sign in on the device and check that progress, streak and custom vocabulary/grammar are restored (requires Cloud Firestore to be enabled — see the README section "Where learning data is stored").
 
@@ -121,49 +139,6 @@ Notes:
 - The build step does not block: the workflow starts the build with `--no-wait`, records the build ID, then polls every minute for up to 210 minutes. The job itself has a 240-minute limit, so a long EAS queue no longer cancels the run.
 - If CI dies anyway, the APK is not lost: copy the EAS build ID from the logs and re-run the workflow with `build_id` to publish that build without spending another EAS build.
 
-## Rebuilding an existing release tag
-
-If a release points at an old commit (for example the tag was created before a bug fix), rebuild it instead of creating a new version. The workflow reuses the tag name for the APK file name and `overwrite_files: true` replaces the previous asset, so the download link stays the same.
-
-Checklist:
-
-- [ ] Finish and push the fix on `main` first.
-
-  ```bash
-  git status                 # must be clean
-  git push origin main
-  git log -1 --oneline       # note this commit
-  ```
-
-- [ ] Delete the GitHub Release and its tag (this also removes the old APK):
-
-  ```bash
-  gh release delete v1.0.0 --yes --cleanup-tag
-  ```
-
-- [ ] Recreate the local tag on the current commit and push it:
-
-  ```bash
-  git tag -d v1.0.0          # ignore "not found" if --cleanup-tag already removed it
-  git tag v1.0.0             # tags whatever HEAD is right now
-  git push origin v1.0.0     # pushes the tag and triggers a fresh build
-  ```
-
-- [ ] Verify both ends point at the same commit:
-
-  ```bash
-  git rev-list -n1 v1.0.0    # local
-  git ls-remote --tags origin v1.0.0
-  ```
-
-- [ ] Watch the new run and confirm the asset was replaced:
-
-  ```bash
-  gh run list --workflow=android-apk.yml --limit 3
-  gh release view v1.0.0
-  ```
-
-- [ ] Tell anyone who already downloaded the old file to download it again — GitHub serves the new asset under the same name.
 
 ## Installing the APK
 

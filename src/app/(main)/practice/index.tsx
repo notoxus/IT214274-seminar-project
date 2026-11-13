@@ -10,20 +10,24 @@ import { AppCard } from '@/components/ui/app-card';
 import { Screen } from '@/components/ui/screen';
 import { StarRating } from '@/components/ui/star-rating';
 import { ThemedText } from '@/components/ui/themed-text';
+import { useTheme } from '@/hooks/use-theme';
 import { getLessons } from '@/services/lesson-service';
-import { activatePracticeReview, getDuePracticeReviews, getPracticeReview, getProgress, recordPracticeAnswer } from '@/services/storage-service';
+import { activatePracticeReview, getProgress, recordPracticeAnswer } from '@/services/storage-service';
+import type { QuizQuestion } from '@/types/quiz';
 import type { LearningProgress, PracticeReviewProgress } from '@/types/statistic';
+
+type QuestionMode = 'first-pass' | 'retry' | 'filler';
 
 export default function PracticeScreen() {
   const router = useRouter();
+  const theme = useTheme();
   const lessons = getLessons();
   const [loading, setLoading] = useState(true);
   const [progress, setProgress] = useState<LearningProgress | null>(null);
-  const [dueIds, setDueIds] = useState<string[]>([]);
   const [lessonId, setLessonId] = useState<string | null>(null);
   const [review, setReview] = useState<PracticeReviewProgress | null>(null);
   const [shownQuestionId, setShownQuestionId] = useState<string | null>(null);
-  const [shownMode, setShownMode] = useState<'first-pass' | 'retry' | 'filler' | null>(null);
+  const [shownMode, setShownMode] = useState<QuestionMode | null>(null);
   const [answer, setAnswer] = useState<string | null>(null);
   const [checked, setChecked] = useState<boolean | null>(null);
   const [saveError, setSaveError] = useState(false);
@@ -42,10 +46,8 @@ export default function PracticeScreen() {
 
   const loadHome = useCallback(async () => {
     setLoading(true);
-    const due = await getDuePracticeReviews();
     const stored = await getProgress();
     setProgress(stored);
-    setDueIds(due);
     setLessonId(null);
     setReview(null);
     setShownQuestionId(null);
@@ -71,43 +73,83 @@ export default function PracticeScreen() {
     submitting.current = false;
   };
 
-  const beginDueReview = async () => {
-    const id = dueIds[0];
-    if (!id) return;
-    setLessonId(id);
-    setReview(await getPracticeReview(id));
-    setShownQuestionId(null);
-    setShownMode(null);
-    setAnswer(null);
-    setChecked(null);
+  const lesson = lessons.find((item) => item.id === lessonId);
+  const allQuestions: QuizQuestion[] = lesson
+    ? [...lesson.questions, ...(lesson.supplementalQuestions ?? [])]
+    : [];
+
+  // Filler pool: unused extra questions first, then known (already answered
+  // correctly) lesson questions as the "spaced gap".
+  const pickFiller = (current: PracticeReviewProgress): { question: QuizQuestion; isExtra: boolean } | null => {
+    const pending = new Set(current.retryQuestionIds);
+    const served = new Set(current.extraServedIds);
+    const extras = (lesson?.supplementalQuestions ?? []).filter(
+      (item) => !pending.has(item.id) && !served.has(item.id)
+    );
+    if (extras.length > 0) return { question: extras[0]!, isExtra: true };
+
+    const known = (lesson?.questions ?? []).filter(
+      (item) =>
+        !pending.has(item.id) &&
+        (current.firstPassCorrectIds.includes(item.id) || current.retryCompletedIds.includes(item.id))
+    );
+    const pool = known.length > 0 ? known : (lesson?.questions ?? []).filter((item) => !pending.has(item.id));
+    if (pool.length === 0) return null;
+    const filler = pool[current.fillerCursor % pool.length];
+    return filler ? { question: filler, isExtra: false } : null;
   };
 
-  const lesson = lessons.find((item) => item.id === lessonId);
-  const queuedQuestion = (() => {
-    if (!lesson || !review) return null;
-    const questions = [...lesson.questions, ...(lesson.supplementalQuestions ?? [])];
-    const nextFirstPass = lesson.questions.find((item) => !review.firstPassQuestionIds.includes(item.id));
-    if (nextFirstPass) return nextFirstPass;
+  // Picks the next question for the single continuous practice session:
+  // owed extras first, then a missed question once it is due, then a new lesson
+  // question; extras / spaced-gap questions bridge the waits in between.
+  const queued = ((): { question: QuizQuestion; mode: QuestionMode; isExtra: boolean } | null => {
+    if (!lesson || !review || !review.active) return null;
+
+    // Extras owed after a retry are served before anything else.
+    if (review.pendingFillers > 0 && review.fillerDelay <= 0) {
+      const filler = pickFiller(review);
+      if (filler) return { question: filler.question, mode: 'filler', isExtra: filler.isExtra };
+    }
+
+    // A missed question that is due comes back before the next new question.
     const nextRetryId = review.retryBatchQuestionIds[0];
-    if (nextRetryId) return questions.find((item) => item.id === nextRetryId) ?? null;
-    const knownCorrectIds = review.firstPassCorrectIds.length > 0
-      ? review.firstPassCorrectIds
-      : review.firstPassQuestionIds.filter((id) => !review.firstPassIncorrectIds.includes(id));
-    const fillerIds = [...knownCorrectIds, ...(lesson.supplementalQuestions ?? []).map((item) => item.id)];
-    if (fillerIds.length === 0) return null;
-    return questions.find((item) => item.id === fillerIds[review.fillerCursor % fillerIds.length]) ?? null;
+    if (nextRetryId) {
+      const nextRetry = allQuestions.find((item) => item.id === nextRetryId);
+      if (nextRetry) return { question: nextRetry, mode: 'retry', isExtra: false };
+    }
+
+    const nextFirstPass = lesson.questions.find((item) => !review.firstPassQuestionIds.includes(item.id));
+    if (nextFirstPass) return { question: nextFirstPass, mode: 'first-pass', isExtra: false };
+
+    // Nothing new or due: bridge with an extra / spaced-gap question.
+    if (review.retryQuestionIds.length > 0 || review.pendingFillers > 0) {
+      const filler = pickFiller(review);
+      if (filler) return { question: filler.question, mode: 'filler', isExtra: filler.isExtra };
+
+      // Last resort: repeat the earliest missed question so the session can end.
+      const forcedId = review.retryQuestionIds[0];
+      const forced = forcedId ? allQuestions.find((item) => item.id === forcedId) : undefined;
+      if (forced) return { question: forced, mode: 'retry', isExtra: false };
+    }
+
+    return null;
   })();
-  const allQuestions = lesson ? [...lesson.questions, ...(lesson.supplementalQuestions ?? [])] : [];
-  const question = (shownQuestionId && allQuestions.find((item) => item.id === shownQuestionId)) || queuedQuestion;
-  const computedMode = !question || !review
-    ? null
-    : review.retryBatchQuestionIds.includes(question.id)
-      ? 'retry'
-      : review.firstPassQuestionIds.includes(question.id) || lesson?.supplementalQuestions?.some((item) => item.id === question.id)
-        ? 'filler'
-        : 'first-pass';
-  const questionMode = shownMode ?? computedMode;
-  const isKnownFiller = !!question && !!review?.firstPassCorrectIds.includes(question.id);
+
+  const question = (shownQuestionId && allQuestions.find((item) => item.id === shownQuestionId)) || queued?.question || null;
+  const questionMode: QuestionMode | null = shownMode ?? queued?.mode ?? null;
+
+  // Duolingo-style bar: answers given vs. answers still owed (new + missed).
+  // Mistakes grow the total, so the bar slows down instead of resetting.
+  const progressPercent = (() => {
+    if (!lesson || !review) return 0;
+    if (review.completed) return 100;
+    const remainingNew = Math.max(0, lesson.questions.length - review.firstPassQuestionIds.length);
+    const answers = review.sessionAnswers ?? 0;
+    const total = answers + remainingNew + review.retryQuestionIds.length;
+    if (total <= 0) return 0;
+    return Math.min(99, Math.round((answers / total) * 100));
+  })();
+
   const unlockedIds = progress?.completedLessonIds ?? [];
 
   const checkAnswer = async () => {
@@ -123,7 +165,7 @@ export default function PracticeScreen() {
       selectedAnswer: answer,
     };
     try {
-      const updated = await recordPracticeAnswer(lesson.id, question.id, correct, lesson.questions.length, questionMode ?? 'first-pass', wrongDetails);
+      const updated = await recordPracticeAnswer(lesson.id, question.id, correct, lesson.questions.length, questionMode ?? 'first-pass', wrongDetails, queued?.isExtra ?? false);
       if (!updated) {
         submitting.current = false;
         return;
@@ -153,30 +195,21 @@ export default function PracticeScreen() {
   }
 
   if (lessonId && review && lesson) {
+    const finished = review.completed && !review.active;
     return (
       <Screen>
         <ThemedText type="title" style={styles.title}>Practice · {lesson.title}</ThemedText>
-        {review.completed && !review.active ? (
+        {finished || !question ? (
           <AppCard>
             <ThemedText type="subtitle">Level complete</ThemedText>
             <StarRating stars={review.lastStars ?? review.bestStars ?? 1} />
             <AppButton title="Back to levels" onPress={() => void loadHome()} />
           </AppCard>
-        ) : !question ? (
-          <AppCard>
-            <ThemedText type="subtitle">Level complete</ThemedText>
-            <ThemedText type="default" themeColor="muted">You finished all questions for {lesson.title}.</ThemedText>
-            <AppButton title="Back to levels" onPress={() => void loadHome()} />
-          </AppCard>
         ) : (
           <AppCard>
-            <ThemedText type="default" themeColor="muted">
-              {questionMode === 'retry'
-                ? `Spaced review · ${Math.max(0, review.retryQuestionIds.length)} missed question(s)`
-                : questionMode === 'filler'
-                  ? isKnownFiller ? 'Review gap · practice a question you already know' : 'Review gap · extra practice question'
-                  : `Question ${review.firstPassQuestionIds.length + 1} of ${lesson.questions.length}`}
-            </ThemedText>
+            <View style={styles.progressTrack}>
+              <View style={[styles.progressFill, { width: `${progressPercent}%` }]} />
+            </View>
             <ThemedText type="default">{question.prompt}</ThemedText>
             {question.type === 'multiple-choice' ? (
               <MultipleChoice question={question} selected={answer} onSelect={setAnswer} disabled={checked !== null} />
@@ -186,22 +219,22 @@ export default function PracticeScreen() {
               <TrueFalse selected={answer} onSelect={setAnswer} disabled={checked !== null} />
             )}
             {checked !== null && (
-              <Text accessibilityRole="alert" style={{ color: checked ? '#27845A' : '#C43F45', fontWeight: '600' }}>
-                {checked ? questionMode === 'retry' ? 'Correct — remembered!' : 'Correct!'
+              <Text accessibilityRole="alert" style={{ color: checked ? theme.success : '#C43F45', fontWeight: '600' }}>
+                {checked
+                  ? 'Correct!'
                   : `Not quite. ${question.explanation ?? 'Review the correct answer and try to remember it next time.'} Correct answer: ${question.answer}`}
               </Text>
             )}
             {saveError && <ThemedText type="small" themeColor="muted">Couldn’t save this answer. Please try again.</ThemedText>}
             {checked === null
               ? <AppButton title="Check answer" disabled={!answer?.trim()} onPress={() => void checkAnswer()} />
-              : <AppButton title="Next question" onPress={advance} />}
+              : <AppButton title="Continue" onPress={advance} />}
           </AppCard>
         )}
       </Screen>
     );
   }
 
-  const dueLesson = lessons.find((item) => dueIds.includes(item.id));
   return (
     <Screen>
       <View style={styles.titleRow}>
@@ -228,14 +261,6 @@ export default function PracticeScreen() {
         </Pressable>
       </View>
       <ThemedText type="default" themeColor="muted">Choose a word review or continue through your practice levels.</ThemedText>
-
-      {dueLesson && (
-        <AppCard>
-          <ThemedText type="subtitle">Spaced review is ready</ThemedText>
-          <ThemedText type="default" themeColor="muted">Continue reviewing missed questions from {dueLesson.title}.</ThemedText>
-          <AppButton title="Continue review" onPress={() => void beginDueReview()} />
-        </AppCard>
-      )}
 
       {lessons.map((item, index) => {
         const unlocked = unlockedIds.includes(item.id);
@@ -265,4 +290,6 @@ const styles = StyleSheet.create({
   wordReviewButtonPressed: { opacity: 0.75, transform: [{ scale: 0.94 }] },
   wordReviewPulse: { position: 'absolute', width: 46, height: 46, borderRadius: 16, backgroundColor: '#FBBF24' },
   wordReviewSparkle: { position: 'absolute', top: 7, right: 7 },
+  progressTrack: { height: 10, borderRadius: 5, backgroundColor: 'rgba(53, 104, 212, 0.15)', overflow: 'hidden' },
+  progressFill: { height: '100%', borderRadius: 5, backgroundColor: '#3568D4' },
 });

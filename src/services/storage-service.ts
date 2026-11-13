@@ -192,6 +192,11 @@ export async function markLessonComplete(lessonId: string) {
       gapIndex: 0,
       active: false,
       completed: false,
+      sessionAnswers: 0,
+      resolvedWrongCount: 0,
+      pendingFillers: 0,
+      fillerDelay: 0,
+      extraServedIds: [],
       firstPassQuestionIds: [],
       firstPassCorrectIds: [],
       firstPassCorrect: 0,
@@ -209,14 +214,20 @@ export async function markLessonComplete(lessonId: string) {
   return progress;
 }
 
-const REVIEW_GAPS = [2, 4, 6];
-
+// A missed question comes back after 1 question while other missed questions are
+// still waiting, otherwise after 1 + the number already answered correctly after
+// coming due. Extra questions bridge the wait when nothing is due yet.
 function createPracticeReview(dueAtQuestionCount: number): PracticeReviewProgress {
   return {
     dueAtQuestionCount,
     gapIndex: 0,
     active: false,
     completed: false,
+    sessionAnswers: 0,
+    resolvedWrongCount: 0,
+    pendingFillers: 0,
+    fillerDelay: 0,
+    extraServedIds: [],
     firstPassQuestionIds: [],
     firstPassCorrectIds: [],
     firstPassCorrect: 0,
@@ -231,68 +242,29 @@ function createPracticeReview(dueAtQuestionCount: number): PracticeReviewProgres
   };
 }
 
-export async function getDuePracticeReviews() {
-  const progress = await getProgress();
-  const questionCount = progress.practiceQuestionAnswers ?? 0;
-  const due: string[] = [];
-  for (const lessonId of progress.completedLessonIds) {
-    progress.practiceReviews ??= {};
-    progress.practiceReviews[lessonId] ??= createPracticeReview(questionCount);
-    const review = progress.practiceReviews[lessonId];
-    review.firstPassCorrectIds ??= [];
-    review.firstPassQuestionIds ??= [];
-    review.firstPassIncorrectIds ??= [];
-    review.retryQuestionIds ??= [];
-    review.retryCompletedIds ??= [];
-    review.retryDueAtQuestionCount ??= {};
-    review.retryGapIndexByQuestion ??= {};
-    review.retryBatchSize ??= 1;
-    review.retryBatchQuestionIds ??= [];
-    review.fillerCursor ??= 0;
-    for (const questionId of review.retryQuestionIds) {
-      review.retryDueAtQuestionCount[questionId] ??= questionCount;
-      review.retryGapIndexByQuestion[questionId] ??= 0;
-    }
-    // Migrate persisted lesson-based schedules to question-based intervals.
-    const legacyReview = review as PracticeReviewProgress & { dueAtLessonCount?: number };
-    if (!Number.isFinite(legacyReview.dueAtQuestionCount)) {
-      const safeGapIndex = Number.isFinite(legacyReview.gapIndex)
-        ? Math.max(0, Math.floor(legacyReview.gapIndex))
-        : 0;
-      legacyReview.dueAtQuestionCount = legacyReview.completed
-        ? questionCount + REVIEW_GAPS[Math.min(safeGapIndex, REVIEW_GAPS.length - 1)]!
-        : questionCount;
-      delete legacyReview.dueAtLessonCount;
-    }
-    if (review.active || review.dueAtQuestionCount <= questionCount) {
-      if (!review.active) {
-        if (review.completed) {
-          review.firstPassQuestionIds = [];
-          review.firstPassCorrectIds = [];
-          review.firstPassCorrect = 0;
-          review.firstPassIncorrectIds = [];
-          review.retryQuestionIds = [];
-          review.retryCompletedIds = [];
-          review.retryDueAtQuestionCount = {};
-          review.retryGapIndexByQuestion = {};
-          review.retryBatchSize = 1;
-          review.retryBatchQuestionIds = [];
-          review.fillerCursor = 0;
-          review.completed = false;
-        }
-        review.active = true;
-      }
-      prepareRetryBatch(review, questionCount);
-      due.push(lessonId);
-    }
+// Fills in fields missing from reviews persisted by older app versions.
+function normalizeReview(review: PracticeReviewProgress, answerCount: number) {
+  review.firstPassQuestionIds ??= [];
+  review.firstPassCorrectIds ??= [];
+  review.firstPassIncorrectIds ??= [];
+  review.retryQuestionIds ??= [];
+  review.retryCompletedIds ??= [];
+  review.retryDueAtQuestionCount ??= {};
+  review.retryGapIndexByQuestion ??= {};
+  review.retryBatchSize ??= 1;
+  review.retryBatchQuestionIds ??= [];
+  review.fillerCursor ??= 0;
+  review.sessionAnswers ??= 0;
+  review.resolvedWrongCount ??= 0;
+  review.pendingFillers ??= 0;
+  review.fillerDelay ??= 0;
+  review.extraServedIds ??= [];
+  review.firstPassCorrect ??= 0;
+  for (const questionId of review.retryQuestionIds) {
+    review.retryDueAtQuestionCount[questionId] ??= answerCount;
+    review.retryGapIndexByQuestion[questionId] ??= 1;
   }
-  await saveProgress(progress);
-  return due;
-}
-
-export async function getPracticeReview(lessonId: string) {
-  const progress = await getProgress();
-  return progress.practiceReviews?.[lessonId] ?? null;
+  review.retryBatchQuestionIds = review.retryBatchQuestionIds.filter((id) => review.retryQuestionIds.includes(id));
 }
 
 export async function activatePracticeReview(lessonId: string) {
@@ -312,9 +284,15 @@ export async function activatePracticeReview(lessonId: string) {
     review.retryBatchSize = 1;
     review.retryBatchQuestionIds = [];
     review.fillerCursor = 0;
+    review.sessionAnswers = 0;
+    review.resolvedWrongCount = 0;
+    review.pendingFillers = 0;
+    review.fillerDelay = 0;
+    review.extraServedIds = [];
   }
   review.active = true;
   review.completed = false;
+  normalizeReview(review, progress.practiceQuestionAnswers ?? 0);
   progress.practiceReviews[lessonId] = review;
   await saveProgress(progress);
   return review;
@@ -326,16 +304,49 @@ export async function recordPracticeAnswer(
   correct: boolean,
   totalQuestions: number,
   mode: 'first-pass' | 'retry' | 'filler',
-  wrongDetails?: Omit<WrongAnswerRecord, 'id' | 'attempts' | 'lastAttemptAt'>
+  wrongDetails?: Omit<WrongAnswerRecord, 'id' | 'attempts' | 'lastAttemptAt'>,
+  fillerIsExtra = false
 ) {
   const progress = await getProgress();
   progress.practiceReviews ??= {};
   const review = progress.practiceReviews[lessonId];
   if (!review || !review.active || totalQuestions <= 0) return null;
+  normalizeReview(review, progress.practiceQuestionAnswers ?? 0);
+
+  const answerCount = () => progress.practiceQuestionAnswers ?? 0;
+
+  const countAnswer = () => {
+    progress.practiceQuestionAnswers = answerCount() + 1;
+    review.sessionAnswers += 1;
+    if (review.fillerDelay > 0) review.fillerDelay -= 1;
+    updateStreakInProgress(progress);
+  };
+
+  // Missed questions come back after 1 question if others are still waiting,
+  // otherwise after 1 + the number of missed questions already put right.
+  const scheduleMiss = (id: string) => {
+    if (!review.retryQuestionIds.includes(id)) review.retryQuestionIds.push(id);
+    const othersWaiting = review.retryQuestionIds.filter((item) => item !== id).length;
+    const gap = othersWaiting > 0 ? 1 : 1 + (review.resolvedWrongCount ?? 0);
+    review.retryDueAtQuestionCount[id] = answerCount() + gap;
+  };
+
+  // The session ends only when every lesson question has been seen, no missed
+  // question is still waiting, and every owed extra question has been served.
+  const maybeFinish = () => {
+    if (
+      review.firstPassQuestionIds.length < totalQuestions ||
+      review.retryQuestionIds.length > 0 ||
+      review.pendingFillers > 0
+    ) {
+      return false;
+    }
+    finishPracticeReview(progress, lessonId, review, totalQuestions);
+    return true;
+  };
 
   if (mode === 'first-pass' && !review.firstPassQuestionIds.includes(questionId)) {
-    progress.practiceQuestionAnswers = (progress.practiceQuestionAnswers ?? 0) + 1;
-    updateStreakInProgress(progress);
+    countAnswer();
     review.firstPassQuestionIds.push(questionId);
     if (correct) {
       review.firstPassCorrect += 1;
@@ -346,84 +357,63 @@ export async function recordPracticeAnswer(
     } else {
       review.firstPassIncorrectIds.push(questionId);
       if (wrongDetails) upsertWrongAnswer(progress, wrongDetails);
+      scheduleMiss(questionId);
     }
-
-    if (review.firstPassQuestionIds.length >= totalQuestions) {
-      if (review.firstPassIncorrectIds.length >= Math.ceil(totalQuestions / 2)) {
-        review.retryQuestionIds = [...review.firstPassIncorrectIds];
-        const answerCount = progress.practiceQuestionAnswers ?? 0;
-        review.retryQuestionIds.forEach((id, index) => {
-          const intervalIndex = Math.min(index, REVIEW_GAPS.length - 1);
-          review.retryDueAtQuestionCount[id] = answerCount + REVIEW_GAPS[intervalIndex]!;
-          review.retryGapIndexByQuestion[id] = Math.min(intervalIndex + 1, REVIEW_GAPS.length - 1);
-        });
-        prepareRetryBatch(review, answerCount);
-      } else {
-        finishPracticeReview(progress, lessonId, review, totalQuestions);
-      }
-    }
+    if (!maybeFinish()) prepareRetryBatch(review, answerCount());
   } else if (mode === 'retry' && review.retryQuestionIds.includes(questionId)) {
-    if (review.retryCompletedIds.includes(questionId) || !review.retryBatchQuestionIds.includes(questionId)) return review;
-    progress.practiceQuestionAnswers = (progress.practiceQuestionAnswers ?? 0) + 1;
-    updateStreakInProgress(progress);
+    if (review.retryCompletedIds.includes(questionId)) return review;
+    countAnswer();
     review.retryBatchQuestionIds = review.retryBatchQuestionIds.filter((id) => id !== questionId);
     if (correct) {
       review.retryCompletedIds.push(questionId);
       review.retryQuestionIds = review.retryQuestionIds.filter((id) => id !== questionId);
       delete review.retryDueAtQuestionCount[questionId];
+      review.resolvedWrongCount += 1;
+      // One extra question is owed straight away.
+      review.pendingFillers += 1;
+      review.fillerDelay = 0;
       progress.wrongAnswers = (progress.wrongAnswers ?? []).filter(
         (item) => item.lessonId !== lessonId || item.questionId !== questionId
       );
     } else {
       if (wrongDetails) upsertWrongAnswer(progress, wrongDetails);
-      const gapIndex = review.retryGapIndexByQuestion[questionId] ?? 0;
-      const nextGap = REVIEW_GAPS[Math.min(gapIndex, REVIEW_GAPS.length - 1)]!;
-      review.retryDueAtQuestionCount[questionId] = (progress.practiceQuestionAnswers ?? 0) + nextGap;
-      review.retryGapIndexByQuestion[questionId] = gapIndex + 1;
-      review.retryBatchSize = Math.min(review.retryQuestionIds.length, review.retryBatchSize + 1);
-
-      // Grow the next repeat batch by one missed question after another failed retry.
-      const nextMissedQuestion = review.retryQuestionIds.find(
-        (id) => id !== questionId && (review.retryDueAtQuestionCount[id] ?? Number.MAX_SAFE_INTEGER) > (progress.practiceQuestionAnswers ?? 0)
-      );
-      if (nextMissedQuestion) {
-        review.retryDueAtQuestionCount[nextMissedQuestion] = review.retryDueAtQuestionCount[questionId]!;
-        review.retryGapIndexByQuestion[nextMissedQuestion] = Math.max(
-          review.retryGapIndexByQuestion[nextMissedQuestion] ?? 0,
-          Math.min(gapIndex + 1, REVIEW_GAPS.length - 1)
-        );
-      }
+      // Two extra questions are owed, but only after the next question.
+      review.pendingFillers += 2;
+      review.fillerDelay = 1;
+      scheduleMiss(questionId);
     }
-    if (review.retryQuestionIds.length === 0) finishPracticeReview(progress, lessonId, review, totalQuestions);
-    else prepareRetryBatch(review, progress.practiceQuestionAnswers ?? 0);
+    if (!maybeFinish()) prepareRetryBatch(review, answerCount());
   } else if (mode === 'filler') {
-    progress.practiceQuestionAnswers = (progress.practiceQuestionAnswers ?? 0) + 1;
-    updateStreakInProgress(progress);
+    countAnswer();
+    if (review.pendingFillers > 0) review.pendingFillers -= 1;
     review.fillerCursor += 1;
-    if (!correct && !review.retryQuestionIds.includes(questionId)) {
-      review.firstPassCorrectIds = review.firstPassCorrectIds.filter((id) => id !== questionId);
-      review.retryQuestionIds.push(questionId);
-      review.retryDueAtQuestionCount[questionId] = (progress.practiceQuestionAnswers ?? 0) + 2;
-      review.retryGapIndexByQuestion[questionId] = 1;
-      if (wrongDetails) upsertWrongAnswer(progress, wrongDetails);
+    if (fillerIsExtra && !review.extraServedIds.includes(questionId)) {
+      review.extraServedIds.push(questionId);
     }
-    prepareRetryBatch(review, progress.practiceQuestionAnswers ?? 0);
+    if (!correct) {
+      if (review.firstPassCorrectIds.includes(questionId)) {
+        review.firstPassCorrectIds = review.firstPassCorrectIds.filter((id) => id !== questionId);
+        review.firstPassCorrect = Math.max(0, review.firstPassCorrect - 1);
+      }
+      if (wrongDetails) upsertWrongAnswer(progress, wrongDetails);
+      scheduleMiss(questionId);
+    }
+    if (!maybeFinish()) prepareRetryBatch(review, answerCount());
   }
 
   await saveProgress(progress);
   return review;
 }
 
+// Queues the next missed question as soon as it comes due. Only one repeats at a
+// time, so it always comes back after a single other question.
 function prepareRetryBatch(review: PracticeReviewProgress, answerCount: number) {
   if (review.retryBatchQuestionIds.length > 0) return;
-  const dueQuestions = review.retryQuestionIds.filter(
+  const due = review.retryQuestionIds.find(
     (id) => (review.retryDueAtQuestionCount[id] ?? Number.MAX_SAFE_INTEGER) <= answerCount
   );
-  if (dueQuestions.length === 0) return;
-  review.retryBatchQuestionIds = dueQuestions.slice(0, Math.max(1, review.retryBatchSize));
-  for (const delayedId of dueQuestions.slice(review.retryBatchQuestionIds.length)) {
-    review.retryDueAtQuestionCount[delayedId] = answerCount + 2;
-  }
+  if (!due) return;
+  review.retryBatchQuestionIds = [due];
 }
 
 function finishPracticeReview(progress: LearningProgress, lessonId: string, review: PracticeReviewProgress, totalQuestions: number) {
@@ -437,11 +427,16 @@ function finishPracticeReview(progress: LearningProgress, lessonId: string, revi
     review.bestStars = stars;
   }
   recordQuizAttemptInProgress(progress, lessonId, totalQuestions, review.firstPassCorrect, stars);
-  // Repetition happens inside this review on question intervals. Completing it
-  // must not schedule the whole lesson again after another few answers.
+  // The whole review loop now happens inside one practice session, so nothing
+  // is scheduled for later. Completing resets the session state.
   review.dueAtQuestionCount = Number.MAX_SAFE_INTEGER;
   review.active = false;
   review.completed = true;
+  review.sessionAnswers = 0;
+  review.resolvedWrongCount = 0;
+  review.pendingFillers = 0;
+  review.fillerDelay = 0;
+  review.extraServedIds = [];
   review.firstPassQuestionIds = [];
   review.firstPassCorrectIds = [];
   review.firstPassCorrect = 0;
