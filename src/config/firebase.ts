@@ -50,16 +50,22 @@ export const firebaseAuth = createAuth();
 // so they survive reinstalling the app. Null when Firebase is not configured.
 function createFirestore() {
   if (!firebaseApp) return null;
-  // The JS SDK's default WebChannel transport is unreliable on React Native;
-  // long polling is the documented workaround for mobile.
-  if (Platform.OS !== 'web') {
-    try {
+  try {
+    // The JS SDK's default WebChannel transport is unreliable on React Native;
+    // long polling is the documented workaround for mobile.
+    if (Platform.OS !== 'web') {
       return initializeFirestore(firebaseApp, { experimentalForceLongPolling: true });
+    }
+    return getFirestore(firebaseApp);
+  } catch {
+    // Already initialized (e.g. Fast Refresh) or unavailable: reuse it if we
+    // can, otherwise disable cloud sync without breaking the app.
+    try {
+      return getFirestore(firebaseApp);
     } catch {
-      // Already initialized (e.g. Fast Refresh) — reuse the existing instance.
+      return null;
     }
   }
-  return getFirestore(firebaseApp);
 }
 
 export const firestore = createFirestore();
