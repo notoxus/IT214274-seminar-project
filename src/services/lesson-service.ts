@@ -1,4 +1,19 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+import { loadCloudDocument, saveCloudDocument } from '@/services/firebase-sync';
+import { getSyncUserId } from '@/services/sync-session';
 import type { GrammarItem, Lesson, Vocabulary } from '@/types/lesson';
+
+const CUSTOM_LESSON_STORAGE_KEY = '@learning-english/custom-lessons';
+const CLOUD_LESSON_DOCUMENT = 'lessonContent';
+
+type CustomLessonContent = {
+  vocabulary: Vocabulary[];
+  grammar: GrammarItem[];
+};
+
+let customContent: Record<string, CustomLessonContent> = {};
+let hydration: Promise<void> | null = null;
 
 const lessons: Lesson[] = [
   {
@@ -69,8 +84,130 @@ supplementalQuestions: [
   },
 ];
 
-export function getLessons() { return lessons; }
-export function getLesson(id: string) { return lessons.find((lesson) => lesson.id === id); }
+function isVocabulary(value: unknown): value is Vocabulary {
+  const item = value as Partial<Vocabulary> | null;
+  return !!item && typeof item.id === 'string' && typeof item.word === 'string' && typeof item.meaning === 'string';
+}
+
+function isGrammar(value: unknown): value is GrammarItem {
+  const item = value as Partial<GrammarItem> | null;
+  return !!item && typeof item.title === 'string' && typeof item.explanation === 'string';
+}
+
+function parseCustomContent(raw: string | null): Record<string, CustomLessonContent> {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw) as Record<string, Partial<CustomLessonContent> | null>;
+    if (!parsed || typeof parsed !== 'object') return {};
+    const result: Record<string, CustomLessonContent> = {};
+    for (const [lessonId, value] of Object.entries(parsed)) {
+      if (!value || typeof value !== 'object') continue;
+      result[lessonId] = {
+        vocabulary: Array.isArray(value.vocabulary) ? value.vocabulary.filter(isVocabulary) : [],
+        grammar: Array.isArray(value.grammar) ? value.grammar.filter(isGrammar) : [],
+      };
+    }
+    return result;
+  } catch {
+    return {};
+  }
+}
+
+function mergeCustomContent(
+  base: Record<string, CustomLessonContent>,
+  incoming: Record<string, CustomLessonContent>
+): Record<string, CustomLessonContent> {
+  const merged: Record<string, CustomLessonContent> = { ...base };
+  for (const [lessonId, extra] of Object.entries(incoming)) {
+    const current = merged[lessonId] ?? { vocabulary: [], grammar: [] };
+    const vocabIds = new Set(current.vocabulary.map((item) => item.id));
+    const grammarKeys = new Set(current.grammar.map((item) => `${item.title}\u0000${item.explanation}\u0000${item.example}`));
+    const vocabulary = [...current.vocabulary];
+    for (const item of extra.vocabulary) {
+      if (!vocabIds.has(item.id)) {
+        vocabIds.add(item.id);
+        vocabulary.push(item);
+      }
+    }
+    const grammar = [...current.grammar];
+    for (const item of extra.grammar) {
+      const key = `${item.title}\u0000${item.explanation}\u0000${item.example}`;
+      if (!grammarKeys.has(key)) {
+        grammarKeys.add(key);
+        grammar.push(item);
+      }
+    }
+    merged[lessonId] = { vocabulary, grammar };
+  }
+  return merged;
+}
+
+function withCustomContent(lesson: Lesson): Lesson {
+  const extra = customContent[lesson.id];
+  if (!extra || (extra.vocabulary.length === 0 && extra.grammar.length === 0)) {
+    return lesson;
+  }
+  const existingVocabIds = new Set(lesson.vocabulary.map((item) => item.id));
+  return {
+    ...lesson,
+    vocabulary: [...lesson.vocabulary, ...extra.vocabulary.filter((item) => !existingVocabIds.has(item.id))],
+    grammar: [...(lesson.grammar ?? []), ...extra.grammar],
+  };
+}
+
+// Loads locally-added vocabulary/grammar from the device. Called once when the
+// app boots so the first render already includes custom content.
+export function loadCustomLessonContent(): Promise<void> {
+  hydration ??= hydrateCustomContent();
+  return hydration;
+}
+
+async function hydrateCustomContent() {
+  try {
+    customContent = parseCustomContent(await AsyncStorage.getItem(CUSTOM_LESSON_STORAGE_KEY));
+  } catch {
+    customContent = {};
+  }
+  // The cloud merge can run in the background: the local copy already renders.
+  void syncCustomLessonContent();
+}
+
+// Pulls custom content from Firestore once the user is signed in, unions it
+// with the local copy (custom content only grows), then writes both back.
+export async function syncCustomLessonContent() {
+  const uid = getSyncUserId();
+  if (!uid) return;
+  try {
+    const remote = await loadCloudDocument<Record<string, CustomLessonContent>>(uid, CLOUD_LESSON_DOCUMENT);
+    if (!remote) {
+      if (Object.keys(customContent).length > 0) {
+        await saveCloudDocument(uid, CLOUD_LESSON_DOCUMENT, customContent);
+      }
+      return;
+    }
+    const merged = mergeCustomContent(customContent, parseCustomContent(JSON.stringify(remote)));
+    customContent = merged;
+    await AsyncStorage.setItem(CUSTOM_LESSON_STORAGE_KEY, JSON.stringify(merged));
+    await saveCloudDocument(uid, CLOUD_LESSON_DOCUMENT, merged);
+  } catch (error) {
+    console.warn('[lesson-content] Cloud sync failed, keeping local content', error);
+  }
+}
+
+async function persistCustomContent(next: Record<string, CustomLessonContent>) {
+  await AsyncStorage.setItem(CUSTOM_LESSON_STORAGE_KEY, JSON.stringify(next));
+  const uid = getSyncUserId();
+  if (uid) {
+    // Local write is what the user is waiting for; cloud backup can finish later.
+    void saveCloudDocument(uid, CLOUD_LESSON_DOCUMENT, next);
+  }
+}
+
+export function getLessons() { return lessons.map(withCustomContent); }
+export function getLesson(id: string) {
+  const lesson = lessons.find((item) => item.id === id);
+  return lesson ? withCustomContent(lesson) : undefined;
+}
 
 // Hàm tạo hẳn 1 chủ đề bài học mới (nếu cần thêm ở Trang chủ)
 export function addNewLesson(newLesson: Lesson) {
@@ -78,20 +215,27 @@ export function addNewLesson(newLesson: Lesson) {
 }
 
 // Hàm thêm 1 từ vựng mới vào đúng bài học có sẵn
-export function addVocabularyToLesson(lessonId: string, newVocab: Vocabulary) {
-  const lesson = lessons.find((item) => item.id === lessonId);
-  if (lesson) {
-    lesson.vocabulary.push(newVocab);
-  }
+export async function addVocabularyToLesson(lessonId: string, newVocab: Vocabulary) {
+  if (!lessons.some((item) => item.id === lessonId)) return false;
+  const current = customContent[lessonId] ?? { vocabulary: [], grammar: [] };
+  const next: Record<string, CustomLessonContent> = {
+    ...customContent,
+    [lessonId]: { ...current, vocabulary: [...current.vocabulary, newVocab] },
+  };
+  await persistCustomContent(next);
+  customContent = next;
+  return true;
 }
 
 //Hàm thêm 1 ngữ pháp mới vào đúng bài học có sẵn
-export function addGrammarToLesson(lessonId: string, newGrammar: GrammarItem) {
-  const lesson = lessons.find((item) => item.id === lessonId);
-  if (lesson) {
-    if (!lesson.grammar) {
-      lesson.grammar = [];
-    }
-    lesson.grammar.push(newGrammar);
-  }
+export async function addGrammarToLesson(lessonId: string, newGrammar: GrammarItem) {
+  if (!lessons.some((item) => item.id === lessonId)) return false;
+  const current = customContent[lessonId] ?? { vocabulary: [], grammar: [] };
+  const next: Record<string, CustomLessonContent> = {
+    ...customContent,
+    [lessonId]: { ...current, grammar: [...current.grammar, newGrammar] },
+  };
+  await persistCustomContent(next);
+  customContent = next;
+  return true;
 }

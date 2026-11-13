@@ -1,0 +1,11 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Each signed-in user may only read/write their own progress and custom
+    // lesson content (see src/services/firebase-sync.ts).
+    match /users/{uid}/appData/{document} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+  }
+}

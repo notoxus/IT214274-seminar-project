@@ -173,3 +173,28 @@ git push origin v1.0.0
 ```
 
 GitHub Actions builds the APK (this uses one EAS build from the monthly quota) and uploads it to the release page, where it can be downloaded or shared as a direct link.
+
+## Where learning data is stored
+
+Learning data is device-first and backed up to Firestore for the signed-in account:
+
+| Data | Local (AsyncStorage) | Cloud (Firestore) |
+| --- | --- | --- |
+| Completed lessons, quiz history, wrong answers, stars, streak | `@learning-english/progress:<uid>` | `users/{uid}/appData/progress` |
+| Vocabulary/grammar added from a lesson screen | `@learning-english/custom-lessons` | `users/{uid}/appData/lessonContent` |
+
+On sign-in the newest progress copy wins, and custom lesson content is merged (it only grows). This means reinstalling the app or signing in on another device restores the account's data — as long as Cloud Firestore is enabled in the Firebase project and the security rules allow it. Paste this into **Firebase Console → Firestore → Rules** (or deploy `firestore.rules`):
+
+```
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{uid}/appData/{document} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+  }
+}
+```
+
+Installing an APK signed with a different key still requires uninstalling the previous app; the cloud backup is restored on the next sign-in.

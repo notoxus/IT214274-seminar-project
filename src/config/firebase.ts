@@ -1,5 +1,6 @@
 import { getApp, getApps, initializeApp } from 'firebase/app';
 import { getAuth, getReactNativePersistence, initializeAuth } from 'firebase/auth';
+import { getFirestore, initializeFirestore } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
@@ -44,3 +45,21 @@ function createAuth() {
 }
 
 export const firebaseAuth = createAuth();
+
+// Cloud database used to back up progress, streak and custom lesson content
+// so they survive reinstalling the app. Null when Firebase is not configured.
+function createFirestore() {
+  if (!firebaseApp) return null;
+  // The JS SDK's default WebChannel transport is unreliable on React Native;
+  // long polling is the documented workaround for mobile.
+  if (Platform.OS !== 'web') {
+    try {
+      return initializeFirestore(firebaseApp, { experimentalForceLongPolling: true });
+    } catch {
+      // Already initialized (e.g. Fast Refresh) — reuse the existing instance.
+    }
+  }
+  return getFirestore(firebaseApp);
+}
+
+export const firestore = createFirestore();

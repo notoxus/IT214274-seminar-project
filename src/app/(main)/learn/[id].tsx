@@ -100,8 +100,8 @@ export default function LessonScreen() {
     }
   };
 
-  // Xử lý lưu nội dung mới vào lesson-service.ts (RAM)
-  const handleSaveNewContent = () => {
+  // Xử lý lưu nội dung mới vào lesson-service.ts (AsyncStorage + Firestore)
+  const handleSaveNewContent = async () => {
     if (addType === 'vocab') {
       if (!word.trim() || !meaning.trim()) {
         Alert.alert('Thiếu thông tin', 'Vui lòng nhập từ tiếng Anh và nghĩa.');
@@ -113,8 +113,13 @@ export default function LessonScreen() {
         pronunciation: pronunciation.trim() || '/.../',
         meaning: meaning.trim(),
       };
-      addVocabularyToLesson(lesson.id, newVocab);
-      setCurrentIndex(lesson.vocabulary.length - 1); // Nhảy tới từ vừa thêm
+      try {
+        await addVocabularyToLesson(lesson.id, newVocab);
+      } catch {
+        Alert.alert('Không lưu được', 'Không thể lưu từ vựng mới. Vui lòng thử lại.');
+        return;
+      }
+      setCurrentIndex(lesson.vocabulary.length); // Nhảy tới từ vừa thêm
       setWord('');
       setPronunciation('');
       setMeaning('');
@@ -128,7 +133,12 @@ export default function LessonScreen() {
         explanation: grammarExplanation.trim(),
         example: grammarExample.trim() || 'No example provided.',
       };
-      addGrammarToLesson(lesson.id, newGrammar);
+      try {
+        await addGrammarToLesson(lesson.id, newGrammar);
+      } catch {
+        Alert.alert('Không lưu được', 'Không thể lưu ngữ pháp mới. Vui lòng thử lại.');
+        return;
+      }
       setGrammarTitle('');
       setGrammarExplanation('');
       setGrammarExample('');
@@ -359,7 +369,7 @@ export default function LessonScreen() {
             )}
 
             {/* Nút lưu nội dung mới */}
-            <TouchableOpacity style={styles.saveBtn} onPress={handleSaveNewContent}>
+            <TouchableOpacity style={styles.saveBtn} onPress={() => void handleSaveNewContent()}>
               <Text style={styles.saveBtnText}>Lưu vào bài học</Text>
             </TouchableOpacity>
           </View>

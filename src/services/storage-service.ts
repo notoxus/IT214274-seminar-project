@@ -1,6 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { PROGRESS_STORAGE_KEY } from '@/constants/constants';
+import { loadCloudDocument, saveCloudDocument } from '@/services/firebase-sync';
+import { getSyncUserId } from '@/services/sync-session';
 import type { LearningProgress, PracticeReviewProgress, WrongAnswerRecord } from '@/types/statistic';
+
+const CLOUD_PROGRESS_DOCUMENT = 'progress';
 
 function createEmptyProgress(): LearningProgress {
   return {
@@ -15,12 +19,17 @@ function createEmptyProgress(): LearningProgress {
   practiceQuestionAnswers: 0,
   totalStars: 0,
   streakDays: 0,
+  updatedAt: 0,
   };
 }
 
-// Read progress from device storage
-export async function getProgress(): Promise<LearningProgress> {
-  const raw = await AsyncStorage.getItem(PROGRESS_STORAGE_KEY);
+// Each account gets its own local key so switching users on one device does not
+// mix progress. Signed-out usage falls back to the original shared key.
+function progressStorageKey(uid: string | null) {
+  return uid ? `${PROGRESS_STORAGE_KEY}:${uid}` : PROGRESS_STORAGE_KEY;
+}
+
+function parseProgress(raw: string | null): LearningProgress {
   if (!raw) return createEmptyProgress();
   try {
     const parsed = JSON.parse(raw) as Partial<LearningProgress>;
@@ -39,15 +48,110 @@ export async function getProgress(): Promise<LearningProgress> {
       practiceQuestionAnswers: Number.isFinite(parsed.practiceQuestionAnswers) ? Math.max(0, Math.floor(parsed.practiceQuestionAnswers!)) : 0,
       totalStars: Number.isFinite(parsed.totalStars) ? Math.max(0, Math.floor(parsed.totalStars!)) : 0,
       streakDays: Number.isFinite(parsed.streakDays) ? parsed.streakDays ?? 0 : 0,
+      updatedAt: Number.isFinite(parsed.updatedAt) ? Math.max(0, parsed.updatedAt!) : 0,
     };
   } catch {
     return createEmptyProgress();
   }
 }
 
-// Save progress back to AsyncStorage
+async function readLocalProgress(uid: string | null = getSyncUserId()): Promise<LearningProgress> {
+  const raw = await AsyncStorage.getItem(progressStorageKey(uid));
+  return parseProgress(raw);
+}
+
+async function writeLocalProgress(progress: LearningProgress, uid: string | null = getSyncUserId()) {
+  await AsyncStorage.setItem(progressStorageKey(uid), JSON.stringify(progress));
+}
+
+function hasMeaningfulProgress(progress: LearningProgress) {
+  return (
+    (progress.updatedAt ?? 0) > 0 ||
+    progress.completedLessonIds.length > 0 ||
+    (progress.completedQuizzes ?? 0) > 0 ||
+    (progress.quizHistory?.length ?? 0) > 0
+  );
+}
+
+// Newest write wins. A fresh install has no data, so the Firestore copy
+// automatically restores the account's progress after reinstalling.
+function pickNewerProgress(local: LearningProgress, remote: LearningProgress | null) {
+  if (!remote) return local;
+  const localHasData = hasMeaningfulProgress(local);
+  const remoteHasData = hasMeaningfulProgress(remote);
+  if (remoteHasData && !localHasData) return remote;
+  if (localHasData && !remoteHasData) return local;
+  const localTime = local.updatedAt ?? 0;
+  const remoteTime = remote.updatedAt ?? 0;
+  if (remoteTime > localTime) return remote;
+  if (localTime > remoteTime) return local;
+  // Tie (e.g. legacy data saved without a timestamp): prefer data over nothing.
+  return localHasData ? local : remote;
+}
+
+let initialSync: Promise<void> = Promise.resolve();
+let syncedUserId: string | null = null;
+
+// Called by the auth layer whenever the signed-in user changes. Starts a
+// one-time restore/merge from Firestore; getProgress() waits for it so screens
+// never render an empty snapshot while the backup is still loading.
+export function setProgressSyncUser(uid: string | null) {
+  if (uid === syncedUserId) return;
+  syncedUserId = uid;
+  initialSync = uid ? initializeProgressForUser(uid) : Promise.resolve();
+}
+
+export function waitForProgressSync() {
+  return initialSync;
+}
+
+async function initializeProgressForUser(uid: string) {
+  try {
+    const userKey = progressStorageKey(uid);
+    const [userRaw, legacyRaw] = await Promise.all([
+      AsyncStorage.getItem(userKey),
+      AsyncStorage.getItem(PROGRESS_STORAGE_KEY),
+    ]);
+    // Migrate progress recorded before per-account keys existed.
+    if (!userRaw && legacyRaw) {
+      await AsyncStorage.setItem(userKey, legacyRaw);
+    }
+    const local = parseProgress(userRaw ?? legacyRaw);
+    const remote = await loadCloudDocument<LearningProgress>(uid, CLOUD_PROGRESS_DOCUMENT);
+    const winner = pickNewerProgress(local, remote);
+    // Make sure anything we keep carries a timestamp, otherwise a future
+    // fresh install cannot tell this copy apart from empty data.
+    const toStore: LearningProgress =
+      (winner.updatedAt ?? 0) > 0 ? winner : { ...winner, updatedAt: Date.now() };
+    if (toStore !== local) {
+      await writeLocalProgress(toStore, uid);
+    }
+    if (
+      hasMeaningfulProgress(toStore) &&
+      (!remote || (toStore.updatedAt ?? 0) > (remote.updatedAt ?? 0))
+    ) {
+      await saveCloudDocument(uid, CLOUD_PROGRESS_DOCUMENT, toStore);
+    }
+  } catch (error) {
+    // Offline or misconfigured Firebase: keep using the device copy.
+    console.warn('[progress] Cloud restore failed, using local data', error);
+  }
+}
+
+// Read progress from device storage (cloud restore already merged on login)
+export async function getProgress(): Promise<LearningProgress> {
+  await initialSync;
+  return readLocalProgress();
+}
+
+// Save progress locally and mirror it to Firestore for the signed-in user
 export async function saveProgress(progress: LearningProgress) {
-  await AsyncStorage.setItem(PROGRESS_STORAGE_KEY, JSON.stringify(progress));
+  const next: LearningProgress = { ...progress, updatedAt: Date.now() };
+  await writeLocalProgress(next);
+  const uid = getSyncUserId();
+  if (uid) {
+    void saveCloudDocument(uid, CLOUD_PROGRESS_DOCUMENT, next);
+  }
 }
 // Update streak based on today's date vs last active date (mutates progress in-place)
 function updateStreakInProgress(progress: LearningProgress) {

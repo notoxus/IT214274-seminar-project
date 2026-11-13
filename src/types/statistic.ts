@@ -54,4 +54,7 @@ export type LearningProgress = {
   totalStars?: number;
   streakDays: number;
   lastActiveDate?: string;
+  // Milliseconds since epoch of the last local/cloud write. Used to decide
+  // which copy wins when merging a device with its Firestore backup.
+  updatedAt?: number;
 };
