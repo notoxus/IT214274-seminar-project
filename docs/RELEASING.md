@@ -122,6 +122,31 @@ When the build finishes, EAS prints a download link and QR code. Download the `.
 
 Do not use `--profile production` for this: that profile produces an `.aab`, which can only be uploaded to Google Play, not installed directly.
 
+### Build locally (no EAS build quota)
+
+To build the APK on your own machine instead of waiting for the EAS cloud queue:
+
+```bash
+npx eas-cli@latest build --platform android --profile preview --local
+```
+
+- Requires the Android SDK and JDK locally (the same toolchain that `npx expo run:android` uses).
+- Builds from the current working tree, so save/commit your changes first.
+- Uses the stored EAS credentials, so the APK is signed with the EAS keystore and updates an existing EAS-signed install without uninstalling. A debug build from `npx expo run:android` uses a different key and must be uninstalled first.
+- The finished `.apk` path is printed at the end of the run.
+
+### Attach or replace the APK on a GitHub Release
+
+```bash
+# attach the APK to a (new) release
+gh release upload v1.0.1 LearningEnglishApp.apk
+
+# replace an existing asset in place — same tag, same download URL
+gh release upload v1.0.0 LearningEnglishApp.apk --clobber
+```
+
+`--clobber` overwrites the asset without creating a new release. Remember that a tag points at a commit, so replacing the APK on an old tag leaves the release source and the APK out of sync — prefer a new tag when the APK contains new commits.
+
 ## Automated release with GitHub Actions
 
 `.github/workflows/android-apk.yml` builds a preview APK on EAS whenever a `v*` tag is pushed, waits for the build to finish, downloads the artifact, and attaches it to the GitHub Release as `LearningEnglishApp-<tag>.apk`.
