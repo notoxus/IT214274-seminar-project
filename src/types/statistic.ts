@@ -62,6 +62,9 @@ export type LearningProgress = {
   wrongAnswers?: WrongAnswerRecord[];
   practiceReviews?: Record<string, PracticeReviewProgress>;
   practiceQuestionAnswers?: number;
+  // Vocabulary ids marked with the heart on the Learn flashcard. Word review
+  // can switch to a favourites-only queue from these ids.
+  favoriteWordIds?: string[];
   totalStars?: number;
   streakDays: number;
   lastActiveDate?: string;

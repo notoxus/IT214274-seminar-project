@@ -17,6 +17,7 @@ function createEmptyProgress(): LearningProgress {
   wrongAnswers: [],
   practiceReviews: {},
   practiceQuestionAnswers: 0,
+  favoriteWordIds: [],
   totalStars: 0,
   streakDays: 0,
   updatedAt: 0,
@@ -46,6 +47,7 @@ function parseProgress(raw: string | null): LearningProgress {
       wrongAnswers: Array.isArray(parsed.wrongAnswers) ? parsed.wrongAnswers : [],
       practiceReviews: parsed.practiceReviews && typeof parsed.practiceReviews === 'object' ? parsed.practiceReviews : {},
       practiceQuestionAnswers: Number.isFinite(parsed.practiceQuestionAnswers) ? Math.max(0, Math.floor(parsed.practiceQuestionAnswers!)) : 0,
+      favoriteWordIds: Array.isArray(parsed.favoriteWordIds) ? parsed.favoriteWordIds.filter((id): id is string => typeof id === 'string') : [],
       totalStars: Number.isFinite(parsed.totalStars) ? Math.max(0, Math.floor(parsed.totalStars!)) : 0,
       streakDays: Number.isFinite(parsed.streakDays) ? parsed.streakDays ?? 0 : 0,
       updatedAt: Number.isFinite(parsed.updatedAt) ? Math.max(0, parsed.updatedAt!) : 0,
@@ -153,6 +155,18 @@ export async function saveProgress(progress: LearningProgress) {
     void saveCloudDocument(uid, CLOUD_PROGRESS_DOCUMENT, next);
   }
 }
+// Add or remove a vocabulary word from the hearted favourites set used by the
+// Practice word review. Returns the updated id list.
+export async function toggleFavoriteWord(wordId: string) {
+  const progress = await getProgress();
+  const favorites = new Set(progress.favoriteWordIds ?? []);
+  if (favorites.has(wordId)) favorites.delete(wordId);
+  else favorites.add(wordId);
+  progress.favoriteWordIds = [...favorites];
+  await saveProgress(progress);
+  return progress.favoriteWordIds;
+}
+
 // Update streak based on today's date vs last active date (mutates progress in-place)
 function updateStreakInProgress(progress: LearningProgress) {
   const today = localDateKey(new Date());

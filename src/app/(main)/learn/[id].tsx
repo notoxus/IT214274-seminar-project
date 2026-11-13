@@ -18,7 +18,7 @@ import { PronunciationMic } from '@/components/learn/pronunciation-mic';
 import { GrammarPoint } from '@/components/learn/grammar-point';
 import { Screen } from '@/components/ui/screen';
 import { ThemedText } from '@/components/ui/themed-text';
-import { getProgress, markLessonComplete } from '@/services/storage-service';
+import { getProgress, markLessonComplete, toggleFavoriteWord } from '@/services/storage-service';
 import { speakEnglishWord } from '@/services/speech-service';
 import {
   getLesson,
@@ -44,7 +44,7 @@ export default function LessonScreen() {
 
   // Memrise-style study card state
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [isFavorite, setIsFavorite] = useState(false);
+  const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
 
   // Forces a re-render right after vocabulary/grammar is added
   const [, setRefreshKey] = useState(0);
@@ -64,9 +64,10 @@ export default function LessonScreen() {
   const [grammarExample, setGrammarExample] = useState('');
 
   useEffect(() => {
-    void getProgress().then((progress) =>
-      setDone(progress.completedLessonIds.includes(id))
-    );
+    void getProgress().then((progress) => {
+      setDone(progress.completedLessonIds.includes(id));
+      setFavoriteIds(progress.favoriteWordIds ?? []);
+    });
   }, [id]);
 
   if (!lesson) {
@@ -84,12 +85,22 @@ export default function LessonScreen() {
   const currentVocab = vocabList[currentIndex] || vocabList[0];
   const progressPercent =
     vocabList.length > 0 ? ((currentIndex + 1) / vocabList.length) * 100 : 0;
+  const isFavorite = currentVocab ? favoriteIds.includes(currentVocab.id) : false;
+
+  const handleToggleFavorite = async () => {
+    if (!currentVocab) return;
+    try {
+      const next = await toggleFavoriteWord(currentVocab.id);
+      setFavoriteIds(next);
+    } catch {
+      Alert.alert('Không lưu được', 'Không thể cập nhật từ yêu thích. Vui lòng thử lại.');
+    }
+  };
 
   // Move to the next vocabulary card (Memrise style)
   const handleNextCard = () => {
     if (currentIndex < vocabList.length - 1) {
       setCurrentIndex(currentIndex + 1);
-      setIsFavorite(false);
     } else {
       Alert.alert(
         'Đã xem hết thẻ từ vựng!',
@@ -194,7 +205,7 @@ export default function LessonScreen() {
               <FlashcardIconButton
                 icon={isFavorite ? 'heart' : 'heart-outline'}
                 color={isFavorite ? '#EF4444' : '#0F172A'}
-                onPress={() => setIsFavorite(!isFavorite)}
+                onPress={() => void handleToggleFavorite()}
               />
             </View>
 

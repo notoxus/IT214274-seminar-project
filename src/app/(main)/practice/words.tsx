@@ -33,6 +33,9 @@ export default function LearnedWordsScreen() {
   const { width } = useWindowDimensions();
 
   const [allWords, setAllWords] = useState<LearnedWord[]>([]);
+  const [favoriteWords, setFavoriteWords] = useState<LearnedWord[]>([]);
+  const [favoriteMode, setFavoriteMode] = useState(false);
+  const [sessionWords, setSessionWords] = useState<LearnedWord[]>([]);
   const [deck, setDeck] = useState<LearnedWord[]>([]);
   const [remembered, setRemembered] = useState(0);
   const [finished, setFinished] = useState(false);
@@ -54,10 +57,23 @@ export default function LearnedWordsScreen() {
     let active = true;
     void getProgress().then((progress) => {
       if (!active) return;
-      const completed = getLessons().filter((lesson) => progress.completedLessonIds.includes(lesson.id));
+      const lessons = getLessons();
+      const completed = lessons.filter((lesson) => progress.completedLessonIds.includes(lesson.id));
       const learnedWords = completed.flatMap((lesson) => lesson.vocabulary.map((word) => ({ lessonTitle: lesson.title, word })));
+      const ids = progress.favoriteWordIds ?? [];
+      // Favourites come from every lesson, so a hearted word is reviewable
+      // even before its lesson is marked complete.
+      const hearted = lessons
+        .flatMap((lesson) => lesson.vocabulary.map((word) => ({ lessonTitle: lesson.title, word })))
+        .filter((item) => ids.includes(item.word.id));
       setAllWords(learnedWords);
-      setDeck(learnedWords);
+      setFavoriteWords(hearted);
+      // With no completed lesson yet, start directly on the favourites deck so
+      // hearted words are still reviewable.
+      const startOnFavorites = learnedWords.length === 0 && hearted.length > 0;
+      setFavoriteMode(startOnFavorites);
+      setSessionWords(startOnFavorites ? hearted : learnedWords);
+      setDeck(startOnFavorites ? hearted : learnedWords);
       setRemembered(0);
       setFinished(false);
       resetCard();
@@ -85,7 +101,20 @@ export default function LearnedWordsScreen() {
   };
 
   const replay = () => {
-    setDeck(allWords);
+    setDeck(sessionWords);
+    setRemembered(0);
+    setFinished(false);
+    resetCard();
+  };
+
+  // The heart switches the deck between every learned word and the words
+  // hearted on the Learn flashcard.
+  const toggleFavoriteMode = () => {
+    const nextMode = !favoriteMode;
+    const source = nextMode ? favoriteWords : allWords;
+    setFavoriteMode(nextMode);
+    setSessionWords(source);
+    setDeck(source);
     setRemembered(0);
     setFinished(false);
     resetCard();
@@ -168,25 +197,55 @@ export default function LearnedWordsScreen() {
         <ThemedText type="title" style={styles.title}>Word review</ThemedText>
       </View>
 
-      {loading ? null : allWords.length === 0 ? (
+      {loading ? null : !favoriteMode && sessionWords.length === 0 ? (
         <AppCard>
           <ThemedText type="subtitle">No learned words yet</ThemedText>
-          <ThemedText type="default" themeColor="muted">Complete a lesson in Learn to add its vocabulary cards here.</ThemedText>
+          {favoriteWords.length > 0 ? (
+            <>
+              <ThemedText type="default" themeColor="muted">
+                Complete a lesson in Learn, or review the {favoriteWords.length} word(s) you hearted.
+              </ThemedText>
+              <AppButton title="Review favorites" onPress={toggleFavoriteMode} />
+            </>
+          ) : (
+            <ThemedText type="default" themeColor="muted">Complete a lesson in Learn to add its vocabulary cards here.</ThemedText>
+          )}
+        </AppCard>
+      ) : favoriteMode && sessionWords.length === 0 ? (
+        <AppCard>
+          <ThemedText type="subtitle">No favorite words yet</ThemedText>
+          <ThemedText type="default" themeColor="muted">Tap the heart on a Learn flashcard, then come back here to review your favorites.</ThemedText>
+          <AppButton title="Review all words" onPress={toggleFavoriteMode} />
         </AppCard>
       ) : finished ? (
         <AppCard>
           <ThemedText type="subtitle">Review complete</ThemedText>
-          <ThemedText type="default" themeColor="muted">You remembered all {allWords.length} word(s).</ThemedText>
+          <ThemedText type="default" themeColor="muted">
+            {favoriteMode ? 'You remembered all favorite words' : `You remembered all ${sessionWords.length} word(s)`}.
+          </ThemedText>
           <AppButton title="Replay" onPress={replay} />
           <AppButton title="Back to Practice" color="#334155" onPress={() => router.back()} />
         </AppCard>
       ) : current ? (
         <>
           <ThemedText type="small" themeColor="muted" style={styles.meta}>
-            {remembered} / {allWords.length} remembered · {deck.length} left · {current.lessonTitle}
+            {favoriteMode ? 'Favorites · ' : ''}{remembered} / {sessionWords.length} remembered · {deck.length} left · {current.lessonTitle}
           </ThemedText>
 
           <View style={styles.deck}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={favoriteMode ? 'Review all learned words' : 'Review favorite words only'}
+              hitSlop={8}
+              onPress={toggleFavoriteMode}
+              style={[styles.favoriteToggle, favoriteMode && styles.favoriteToggleActive]}
+            >
+              <Ionicons
+                name={favoriteMode ? 'heart' : 'heart-outline'}
+                size={20}
+                color={favoriteMode ? '#EF4444' : '#0F172A'}
+              />
+            </Pressable>
             <Animated.View
               style={[
                 styles.cardWrap,
@@ -257,6 +316,21 @@ const styles = StyleSheet.create({
   title: { marginTop: 15 },
   meta: { marginTop: 10, marginBottom: 4 },
   deck: { marginTop: 10, marginBottom: 6, minHeight: 300, justifyContent: 'center' },
+  favoriteToggle: {
+    position: 'absolute',
+    top: 0,
+    right: 4,
+    zIndex: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: 'rgba(15, 23, 42, 0.1)',
+  },
+  favoriteToggleActive: { backgroundColor: '#FEE2E2', borderColor: '#FCA5A5' },
   cardWrap: { position: 'relative' },
   badge: {
     position: 'absolute',
