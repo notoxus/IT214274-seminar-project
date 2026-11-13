@@ -274,6 +274,9 @@ function normalizeReview(review: PracticeReviewProgress, answerCount: number) {
   review.fillerDelay ??= 0;
   review.extraServedIds ??= [];
   review.firstPassCorrect ??= 0;
+  // Never keep a resolved question in the retry queue: an older build could
+  // put one back after it was missed again as a filler, freezing the session.
+  review.retryQuestionIds = review.retryQuestionIds.filter((id) => !review.retryCompletedIds.includes(id));
   for (const questionId of review.retryQuestionIds) {
     review.retryDueAtQuestionCount[questionId] ??= answerCount;
     review.retryGapIndexByQuestion[questionId] ??= 1;
@@ -375,7 +378,17 @@ export async function recordPracticeAnswer(
     }
     if (!maybeFinish()) prepareRetryBatch(review, answerCount());
   } else if (mode === 'retry' && review.retryQuestionIds.includes(questionId)) {
-    if (review.retryCompletedIds.includes(questionId)) return review;
+    if (review.retryCompletedIds.includes(questionId)) {
+      // Defensive recovery for sessions persisted by older builds: a resolved
+      // question can still sit in the retry queue. Drop it instead of returning
+      // a no-op so the queue can move on instead of repeating it forever.
+      review.retryQuestionIds = review.retryQuestionIds.filter((id) => id !== questionId);
+      review.retryBatchQuestionIds = review.retryBatchQuestionIds.filter((id) => id !== questionId);
+      delete review.retryDueAtQuestionCount[questionId];
+      prepareRetryBatch(review, answerCount());
+      await saveProgress(progress);
+      return review;
+    }
     countAnswer();
     review.retryBatchQuestionIds = review.retryBatchQuestionIds.filter((id) => id !== questionId);
     if (correct) {
@@ -405,6 +418,11 @@ export async function recordPracticeAnswer(
       review.extraServedIds.push(questionId);
     }
     if (!correct) {
+      // A spaced-gap question can be one that was already resolved earlier.
+      // Missing it again must reopen it, otherwise it stays in
+      // retryCompletedIds while sitting in retryQuestionIds and the retry
+      // handler ignores it forever (the session gets stuck on that card).
+      review.retryCompletedIds = review.retryCompletedIds.filter((id) => id !== questionId);
       if (review.firstPassCorrectIds.includes(questionId)) {
         review.firstPassCorrectIds = review.firstPassCorrectIds.filter((id) => id !== questionId);
         review.firstPassCorrect = Math.max(0, review.firstPassCorrect - 1);
