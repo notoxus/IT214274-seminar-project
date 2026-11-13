@@ -174,6 +174,28 @@ git push origin v1.0.0
 
 GitHub Actions builds the APK (this uses one EAS build from the monthly quota) and uploads it to the release page, where it can be downloaded or shared as a direct link.
 
+#### Rebuilding an existing release tag
+
+If a release points at an old commit (for example the tag was created before a bug fix), rebuild it instead of creating a new version. The workflow reuses the tag name for the APK file name and `overwrite_files: true` replaces the previous asset, so the download link stays the same.
+
+```bash
+# 1. Delete the GitHub Release and its tag (removes the old APK too)
+gh release delete v1.0.0 --yes --cleanup-tag
+
+# 2. Delete the local tag, then recreate it on the current commit
+git tag -d v1.0.0
+git tag v1.0.0          # tag whatever HEAD is now — check with: git log -1 --oneline
+git push origin v1.0.0  # pushing the tag triggers a fresh build
+```
+
+Notes:
+
+- Make sure the code you want is committed and pushed to `main` **before** tagging, then check out `main` so the new tag includes it: `git rev-list -n1 v1.0.0` should equal `git rev-parse HEAD`.
+- APK files are gitignored (`*.apk`), so never commit the build — CI attaches it to the release.
+- Each run consumes one EAS build from the monthly quota; a rebuild usually takes 15–75 minutes depending on the EAS queue.
+- When the run is done, the release `v1.0.0` contains the new `LearningEnglishApp-v1.0.0.apk`. Anyone who already downloaded the old file must download again.
+- To watch or debug the run: `gh run list --workflow=android-apk.yml --limit 3` and `gh run watch`.
+
 ## Where learning data is stored
 
 Learning data is device-first and backed up to Firestore for the signed-in account:
