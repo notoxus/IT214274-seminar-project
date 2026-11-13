@@ -209,12 +209,12 @@ export function getLesson(id: string) {
   return lesson ? withCustomContent(lesson) : undefined;
 }
 
-// Hàm tạo hẳn 1 chủ đề bài học mới (nếu cần thêm ở Trang chủ)
+// Create a whole new lesson topic (used if the home screen ever needs one)
 export function addNewLesson(newLesson: Lesson) {
   lessons.push(newLesson);
 }
 
-// Hàm thêm 1 từ vựng mới vào đúng bài học có sẵn
+// Add a vocabulary entry to an existing lesson
 export async function addVocabularyToLesson(lessonId: string, newVocab: Vocabulary) {
   if (!lessons.some((item) => item.id === lessonId)) return false;
   const current = customContent[lessonId] ?? { vocabulary: [], grammar: [] };
@@ -227,7 +227,7 @@ export async function addVocabularyToLesson(lessonId: string, newVocab: Vocabula
   return true;
 }
 
-//Hàm thêm 1 ngữ pháp mới vào đúng bài học có sẵn
+// Add a grammar point to an existing lesson
 export async function addGrammarToLesson(lessonId: string, newGrammar: GrammarItem) {
   if (!lessons.some((item) => item.id === lessonId)) return false;
   const current = customContent[lessonId] ?? { vocabulary: [], grammar: [] };

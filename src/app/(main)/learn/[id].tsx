@@ -40,26 +40,26 @@ export default function LessonScreen() {
   const theme = useTheme();
   const lesson = getLesson(id);
 
-  // State tiến độ hoàn thành bài học (giữ nguyên logic gốc của dự án)
+  // Lesson completion state (kept from the original project logic)
   const [done, setDone] = useState(false);
 
-  // State điều khiển thẻ học kiểu Memrise
+  // Memrise-style study card state
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFavorite, setIsFavorite] = useState(false);
 
-  // State ép giao diện cập nhật lại ngay sau khi thêm từ vựng/ngữ pháp vào RAM
+  // Forces a re-render right after vocabulary/grammar is added
   const [, setRefreshKey] = useState(0);
 
-  // State cho Modal thêm bài học / từ vựng / ngữ pháp mới
+  // State for the "add lesson content" modal
   const [modalVisible, setModalVisible] = useState(false);
   const [addType, setAddType] = useState<'vocab' | 'grammar'>('vocab');
 
-  // Input cho Từ vựng mới
+  // Inputs for the new vocabulary entry
   const [word, setWord] = useState('');
   const [pronunciation, setPronunciation] = useState('');
   const [meaning, setMeaning] = useState('');
 
-  // Input cho Ngữ pháp mới
+  // Inputs for the new grammar entry
   const [grammarTitle, setGrammarTitle] = useState('');
   const [grammarExplanation, setGrammarExplanation] = useState('');
   const [grammarExample, setGrammarExample] = useState('');
@@ -86,7 +86,7 @@ export default function LessonScreen() {
   const progressPercent =
     vocabList.length > 0 ? ((currentIndex + 1) / vocabList.length) * 100 : 0;
 
-  // Chuyển sang thẻ từ vựng tiếp theo (phong cách Memrise)
+  // Move to the next vocabulary card (Memrise style)
   const handleNextCard = () => {
     if (currentIndex < vocabList.length - 1) {
       setCurrentIndex(currentIndex + 1);
@@ -100,7 +100,7 @@ export default function LessonScreen() {
     }
   };
 
-  // Xử lý lưu nội dung mới vào lesson-service.ts (AsyncStorage + Firestore)
+  // Persist the new entry through lesson-service.ts (AsyncStorage + Firestore)
   const handleSaveNewContent = async () => {
     if (addType === 'vocab') {
       if (!word.trim() || !meaning.trim()) {
@@ -119,7 +119,7 @@ export default function LessonScreen() {
         Alert.alert('Không lưu được', 'Không thể lưu từ vựng mới. Vui lòng thử lại.');
         return;
       }
-      setCurrentIndex(lesson.vocabulary.length); // Nhảy tới từ vừa thêm
+      setCurrentIndex(lesson.vocabulary.length); // Jump to the vocabulary just added
       setWord('');
       setPronunciation('');
       setMeaning('');
@@ -150,7 +150,7 @@ export default function LessonScreen() {
 
   return (
     <Screen>
-      {/* THANH TIÊU ĐỀ & TIẾN ĐỘ PHONG CÁCH MEMRISE */}
+      {/* TITLE BAR & PROGRESS, MEMRISE STYLE */}
       <View style={styles.memriseHeader}>
         <TouchableOpacity onPress={() => router.back()} style={styles.headerIconBtn}>
           <Ionicons name="close" size={24} color="#0F172A" />
@@ -165,7 +165,7 @@ export default function LessonScreen() {
           </View>
         </View>
 
-        {/* Nút mở khung viết thêm bài học / từ vựng mới */}
+        {/* Button that opens the add lesson content modal */}
         <TouchableOpacity
           onPress={() => setModalVisible(true)}
           style={styles.headerIconBtn}
@@ -178,7 +178,7 @@ export default function LessonScreen() {
         {lesson.description}
       </ThemedText>
 
-      {/* KHU VỰC HỌC TỪNG THẺ LỚN KIỂU MEMRISE */}
+      {/* LARGE STUDY CARD AREA, MEMRISE STYLE */}
       {currentVocab && (
         <View style={[styles.memriseStage, { backgroundColor: theme.surface, borderColor: theme.border }]}>
           <ThemedText themeColor="muted" style={styles.stageLabel}>
@@ -192,7 +192,7 @@ export default function LessonScreen() {
           <ThemedText themeColor="muted" style={styles.stageLabel}>NGHĨA TIẾNG VIỆT</ThemedText>
           <ThemedText themeColor="text" style={styles.stageMeaning}>{currentVocab.meaning}</ThemedText>
 
-          {/* Cụm nút tròn chức năng + Nút Mic vàng giống Memrise */}
+          {/* Round action buttons plus the yellow mic button, Memrise style */}
           <View style={styles.actionRow}>
             <View style={styles.circleGroup}>
               <TouchableOpacity
@@ -218,7 +218,7 @@ export default function LessonScreen() {
             <PronunciationMic word={currentVocab.word} size={48} buttonStyle={styles.micBtn} />
           </View>
 
-          {/* 2 nút điều hướng đặc trưng của Memrise */}
+          {/* The two navigation buttons that are characteristic of Memrise */}
           <View style={styles.memriseButtons}>
             <TouchableOpacity style={styles.knownBtn} onPress={handleNextCard}>
               <Ionicons name="checkmark-circle-outline" size={20} color="#0F172A" />
@@ -232,7 +232,7 @@ export default function LessonScreen() {
         </View>
       )}
 
-      {/* KHUNG CHỨA DANH SÁCH TỪ VỰNG (Dùng component VocabularyCard có sẵn) */}
+      {/* VOCABULARY LIST (reuses the existing VocabularyCard component) */}
       <View style={styles.sectionHeaderRow}>
         <ThemedText type="subtitle">Vocabulary ({lesson.vocabulary.length})</ThemedText>
         <TouchableOpacity onPress={() => { setAddType('vocab'); setModalVisible(true); }}>
@@ -244,7 +244,7 @@ export default function LessonScreen() {
         <VocabularyCard key={item.id || item.word} word={item} />
       ))}
 
-      {/* KHUNG CHỨA ĐIỂM NGỮ PHÁP (Dùng component GrammarPoint có sẵn) */}
+      {/* GRAMMAR SECTION (reuses the existing GrammarPoint component) */}
       <View style={styles.sectionHeaderRow}>
         <ThemedText type="subtitle">
           Grammar ({lesson.grammar?.length || 0})
@@ -269,7 +269,7 @@ export default function LessonScreen() {
         </ThemedText>
       )}
 
-      {/* NÚT HOÀN THÀNH BÀI HỌC CÓ SẴN CỦA DỰ ÁN */}
+      {/* EXISTING "COMPLETE LESSON" BUTTON */}
       <View style={{ marginTop: 16, marginBottom: 32 }}>
         <AppButton
           title={done ? 'Lesson completed' : 'Mark lesson complete'}
@@ -280,7 +280,7 @@ export default function LessonScreen() {
         />
       </View>
 
-      {/* MODAL VIẾT THÊM TỪ VỰNG / NGỮ PHÁP MỚI */}
+      {/* MODAL FOR ADDING NEW VOCABULARY / GRAMMAR */}
       <Modal
         visible={modalVisible}
         animationType="slide"
@@ -296,7 +296,7 @@ export default function LessonScreen() {
               </TouchableOpacity>
             </View>
 
-                        {/* Tab chuyển đổi giữa Thêm Từ Vựng và Thêm Ngữ Pháp */}
+            {/* Tabs that switch between adding vocabulary and grammar */}
             <View style={styles.tabSwitch}>
               <TouchableOpacity
                 style={[styles.tabBtn, addType === 'vocab' && styles.tabBtnActive]}
@@ -317,7 +317,7 @@ export default function LessonScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* Form nhập liệu tương ứng với Tab đang chọn */}
+            {/* Input form for the selected tab */}
             {addType === 'vocab' ? (
               <>
                 <TextInput
@@ -368,7 +368,7 @@ export default function LessonScreen() {
               </>
             )}
 
-            {/* Nút lưu nội dung mới */}
+            {/* Save button */}
             <TouchableOpacity style={styles.saveBtn} onPress={() => void handleSaveNewContent()}>
               <Text style={styles.saveBtnText}>Lưu vào bài học</Text>
             </TouchableOpacity>

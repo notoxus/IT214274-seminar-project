@@ -44,6 +44,7 @@ LearningEnglishApp/
 │   ├── services/                     # Firebase auth, local progress, lesson data
 │   ├── types/                        # Auth, lesson, and quiz models
 │   └── constants/                    # Theme, app constants, and formatters
+├── docs/RELEASING.md                 # APK build, release and signing checklist
 ├── .env.example                      # Firebase environment variable names
 ├── app.json
 ├── package.json
@@ -51,7 +52,7 @@ LearningEnglishApp/
 └── README.md
 ```
 
-Firebase settings are read from `EXPO_PUBLIC_FIREBASE_API_KEY`, `EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN`, `EXPO_PUBLIC_FIREBASE_PROJECT_ID`, `EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET`, `EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`, and `EXPO_PUBLIC_FIREBASE_APP_ID`. Add these to a local `.env` file after creating a Firebase web app and enabling Email/Password sign-in. Progress is stored on-device with AsyncStorage; lesson examples and quiz questions are local seed data.
+Firebase settings are read from `EXPO_PUBLIC_FIREBASE_API_KEY`, `EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN`, `EXPO_PUBLIC_FIREBASE_PROJECT_ID`, `EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET`, `EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`, and `EXPO_PUBLIC_FIREBASE_APP_ID`. Add these to a local `.env` file after creating a Firebase web app and enabling Email/Password sign-in. Progress is stored on-device with AsyncStorage and backed up to Firestore for the signed-in account (see "Where learning data is stored"); lesson examples and quiz questions are local seed data.
 
 
 ## Build and Run:
@@ -141,60 +142,16 @@ npx expo run:ios       # iOS simulator, or a physical device from a Mac
 
 After that, run `npx expo start` and open the installed app instead of Expo Go. Re-run if the native dependencies or `app.json` plugins change.
 
-#### Build an installable APK (share with Android users)
+#### Building and releasing the APK
 
-The `preview` profile in `eas.json` uses internal distribution, so it produces an `.apk` that installs directly on any Android device — no Play Store account needed. Cloud builds do not read the local `.env` file, so push the environment variables to EAS first (only needed once, or again whenever `.env` changes):
+The full procedure — manual EAS build, the GitHub Actions release workflow, the release checklist, rebuilding an existing tag, and installation/troubleshooting — is in **[docs/RELEASING.md](docs/RELEASING.md)**.
 
-```bash
-npx eas-cli@latest env:push preview --path .env
-npx eas-cli@latest build --platform android --profile preview
-```
-
-When the build finishes, EAS prints a download link and QR code. Download the `.apk` from that link (EAS stores the artifact; it is not committed to this repository) and share it — recipients need to allow "install unknown apps" for their browser/file manager.
-
-Do not use `--profile production` for this: that profile produces an `.aab`, which can only be uploaded to Google Play, not installed directly.
-
-#### Automated APK releases with GitHub Actions
-
-`.github/workflows/android-apk.yml` builds a preview APK on EAS whenever a `v*` tag is pushed and attaches the `.apk` to the GitHub Release.
-
-One-time setup:
-
-1. Run the manual preview build above once, so EAS creates and stores the Android keystore. The workflow runs EAS in `--non-interactive` mode and cannot generate a new keystore.
-2. Make sure the `preview` environment variables exist on EAS (`npx eas-cli@latest env:push preview --path .env`).
-3. Create an access token at [expo.dev/settings/access-tokens](https://expo.dev/settings/access-tokens).
-4. Add it as a repository secret named `EXPO_TOKEN` (GitHub → Settings → Secrets and variables → Actions).
-
-Then publish a release:
+Quick version:
 
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
+git tag v1.0.0        # tag the commit you want to ship
+git push origin v1.0.0  # CI builds the APK and attaches it to the release
 ```
-
-GitHub Actions builds the APK (this uses one EAS build from the monthly quota) and uploads it to the release page, where it can be downloaded or shared as a direct link.
-
-#### Rebuilding an existing release tag
-
-If a release points at an old commit (for example the tag was created before a bug fix), rebuild it instead of creating a new version. The workflow reuses the tag name for the APK file name and `overwrite_files: true` replaces the previous asset, so the download link stays the same.
-
-```bash
-# 1. Delete the GitHub Release and its tag (removes the old APK too)
-gh release delete v1.0.0 --yes --cleanup-tag
-
-# 2. Delete the local tag, then recreate it on the current commit
-git tag -d v1.0.0
-git tag v1.0.0          # tag whatever HEAD is now — check with: git log -1 --oneline
-git push origin v1.0.0  # pushing the tag triggers a fresh build
-```
-
-Notes:
-
-- Make sure the code you want is committed and pushed to `main` **before** tagging, then check out `main` so the new tag includes it: `git rev-list -n1 v1.0.0` should equal `git rev-parse HEAD`.
-- APK files are gitignored (`*.apk`), so never commit the build — CI attaches it to the release.
-- Each run consumes one EAS build from the monthly quota; a rebuild usually takes 15–75 minutes depending on the EAS queue.
-- When the run is done, the release `v1.0.0` contains the new `LearningEnglishApp-v1.0.0.apk`. Anyone who already downloaded the old file must download again.
-- To watch or debug the run: `gh run list --workflow=android-apk.yml --limit 3` and `gh run watch`.
 
 ## Where learning data is stored
 
