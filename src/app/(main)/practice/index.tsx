@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, useMemo } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,7 +17,7 @@ import type { QuizQuestion } from '@/types/quiz';
 import type { LearningProgress, PracticeReviewProgress } from '@/types/statistic';
 
 type QuestionMode = 'first-pass' | 'retry' | 'filler';
-// Suffle question
+// Fisher-Yates shuffle, used once when a lesson starts
 const shuffleArray = <T,>(array: T[]): T[] => {
   const newArr = [...array];
   for (let i = newArr.length - 1; i > 0; i--) {
@@ -42,6 +42,7 @@ export default function PracticeScreen() {
   const submitting = useRef(false);
   const [wordPulse] = useState(() => new Animated.Value(0));
   const [shuffledQuestionIds, setShuffledQuestionIds] = useState<string[]>([]);
+  const [shuffledExtraIds, setShuffledExtraIds] = useState<string[]>([]);
 
   useFocusEffect(useCallback(() => {
     const pulse = Animated.loop(Animated.sequence([
@@ -60,8 +61,9 @@ export default function PracticeScreen() {
     setLessonId(null);
     setReview(null);
     setShownQuestionId(null);
-    setShuffledQuestionIds([]);
     setShownMode(null);
+    setShuffledQuestionIds([]);
+    setShuffledExtraIds([]);
     setAnswer(null);
     setChecked(null);
     setSaveError(false);
@@ -74,10 +76,11 @@ export default function PracticeScreen() {
   const beginLesson = async (id: string) => {
     const activeReview = await activatePracticeReview(id);
     if (!activeReview) return;
-    // suffle when new lesson begun
+    // Shuffle the question and extra-question order once per lesson.
     const targetLesson = lessons.find((item) => item.id === id);
     if (targetLesson) {
       setShuffledQuestionIds(shuffleArray(targetLesson.questions.map(q => q.id)));
+      setShuffledExtraIds(shuffleArray((targetLesson.supplementalQuestions ?? []).map(q => q.id)));
     }
     setLessonId(id);
     setReview(activeReview);
@@ -93,75 +96,83 @@ export default function PracticeScreen() {
     ? [...lesson.questions, ...(lesson.supplementalQuestions ?? [])]
     : [];
 
-  const queued = useMemo((): { question: QuizQuestion; mode: QuestionMode; isExtra: boolean } | null => {
+  const queued = ((): { question: QuizQuestion; mode: QuestionMode; isExtra: boolean } | null => {
     if (!lesson || !review || !review.active) return null;
-    // Add filler to reuse
+
+    const lessonOrder = shuffledQuestionIds.length > 0
+      ? shuffledQuestionIds
+      : lesson.questions.map((item) => item.id);
+    const extraOrder = shuffledExtraIds.length > 0
+      ? shuffledExtraIds
+      : (lesson.supplementalQuestions ?? []).map((item) => item.id);
+
     const pickFiller = (current: PracticeReviewProgress) => {
       const pending = new Set(current.retryQuestionIds);
       const served = new Set(current.extraServedIds);
-      // Except recent question
-      const extras = (lesson?.supplementalQuestions ?? []).filter(
-        (item) => !pending.has(item.id) && !served.has(item.id) && item.id !== shownQuestionId
-      );
-      // Random
-      if (extras.length > 0) {
-        const randomExtra = extras[Math.floor(Math.random() * extras.length)];
-        return { question: randomExtra!, isExtra: true };
-      }
-      // Known filter
-      const known = (lesson?.questions ?? []).filter(
-        (item) =>
-          !pending.has(item.id) &&
-          (current.firstPassCorrectIds.includes(item.id) || current.retryCompletedIds.includes(item.id)) &&
-          item.id !== shownQuestionId
-      );
-      const pool = known.length > 0 ? known : (lesson?.questions ?? []).filter(
-        (item) => !pending.has(item.id) && item.id !== shownQuestionId
-      );
+
+      // Extra questions first
+      const extras = extraOrder
+        .map((id) => (lesson.supplementalQuestions ?? []).find((item) => item.id === id))
+        .filter((item): item is QuizQuestion => !!item && !pending.has(item.id) && !served.has(item.id));
+      if (extras.length > 0) return { question: extras[0]!, isExtra: true };
+
+      // `fillerCursor` hepls a card is not repeated back-to-back.
+      const known = lessonOrder
+        .map((id) => lesson.questions.find((item) => item.id === id))
+        .filter(
+          (item): item is QuizQuestion =>
+            !!item &&
+            !pending.has(item.id) &&
+            (current.firstPassCorrectIds.includes(item.id) || current.retryCompletedIds.includes(item.id))
+        );
+      const pool = known.length > 0
+        ? known
+        : lessonOrder
+            .map((id) => lesson.questions.find((item) => item.id === id))
+            .filter((item): item is QuizQuestion => !!item && !pending.has(item.id));
       if (pool.length === 0) return null;
-      const filler = pool[Math.floor(Math.random() * pool.length)];
-      return filler ? { question: filler, isExtra: false } : null;
+      return { question: pool[current.fillerCursor % pool.length]!, isExtra: false };
     };
 
-    // Priority 1: Filler
+    // Priority 1: Filler questions.
     if (review.pendingFillers > 0 && review.fillerDelay <= 0) {
       const filler = pickFiller(review);
       if (filler) return { question: filler.question, mode: 'filler', isExtra: filler.isExtra };
     }
 
-    // Priority 2: Retry with your mistake
-    const nextRetryId = review.retryBatchQuestionIds.find(id => id !== shownQuestionId);
+    // Priority 2: Retry - a missed question that has come due comes back before the
+    // next unseen question.
+    const nextRetryId = review.retryBatchQuestionIds[0];
     if (nextRetryId) {
       const nextRetry = allQuestions.find((item) => item.id === nextRetryId);
       if (nextRetry) return { question: nextRetry, mode: 'retry', isExtra: false };
     }
 
-    // Priority 3: Next question
-    const nextFirstPassId = shuffledQuestionIds.find((id) => !review.firstPassQuestionIds.includes(id));
+    // Priority 3: First Pass - the next unseen lesson question, in shuffled order
+    const nextFirstPassId = lessonOrder.find((id) => !review.firstPassQuestionIds.includes(id));
     if (nextFirstPassId) {
-      const nextFirstPass = lesson.questions.find(item => item.id === nextFirstPassId);
+      const nextFirstPass = lesson.questions.find((item) => item.id === nextFirstPassId);
       if (nextFirstPass) return { question: nextFirstPass, mode: 'first-pass', isExtra: false };
     }
-
-    // If lessons weren't completed, filler -> mistake (force)
+    // Nothing new or due: bridge with an extra / spaced-gap question so the
+    // session can finish.
     if (review.retryQuestionIds.length > 0 || review.pendingFillers > 0) {
       const filler = pickFiller(review);
       if (filler) return { question: filler.question, mode: 'filler', isExtra: filler.isExtra };
 
-      const forcedId = review.retryQuestionIds.find(id => id !== shownQuestionId) || review.retryQuestionIds[0];
+      const forcedId = review.retryQuestionIds[0];
       const forced = forcedId ? allQuestions.find((item) => item.id === forcedId) : undefined;
       if (forced) return { question: forced, mode: 'retry', isExtra: false };
     }
 
     return null;
-  }, [lesson, review, allQuestions, shownQuestionId, shuffledQuestionIds]);
-
+  })();
 
   const question = (shownQuestionId && allQuestions.find((item) => item.id === shownQuestionId)) || queued?.question || null;
   const questionMode: QuestionMode | null = shownMode ?? queued?.mode ?? null;
 
   // Progress bar that reference from Duolingo-style
-  const progressPercent = useMemo(() => {
+  const progressPercent = (() => {
     if (!lesson || !review) return 0;
     if (review.completed) return 100;
     const remainingNew = Math.max(0, lesson.questions.length - review.firstPassQuestionIds.length);
@@ -169,7 +180,7 @@ export default function PracticeScreen() {
     const total = answers + remainingNew + review.retryQuestionIds.length;
     if (total <= 0) return 0;
     return Math.min(99, Math.round((answers / total) * 100));
-  }, [lesson, review]);
+  })();
 
   const unlockedIds = progress?.completedLessonIds ?? [];
 
