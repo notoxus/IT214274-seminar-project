@@ -284,7 +284,7 @@ export default function LearnedWordsScreen() {
               </Animated.View>
 
               <Animated.View pointerEvents="none" style={[styles.badge, styles.badgeKnown, { opacity: knownOpacity }]}>
-                <Text style={styles.badgeKnownText}>NHỚ RA</Text>
+                <Text style={styles.badgeKnownText}>ĐÃ NHỚ</Text>
               </Animated.View>
               <Animated.View pointerEvents="none" style={[styles.badge, styles.badgeAgain, { opacity: againOpacity }]}>
                 <Text style={styles.badgeAgainText}>ÔN LẠI</Text>
@@ -298,7 +298,7 @@ export default function LearnedWordsScreen() {
                 <AppButton title="Chưa nhớ" color="#B45309" onPress={() => swipeAway(-1)} />
               </View>
               <View style={styles.actionSlot}>
-                <AppButton title="Nhớ ra" onPress={() => swipeAway(1)} />
+                <AppButton title="Đã nhớ" onPress={() => swipeAway(1)} />
               </View>
             </View>
           ) : (

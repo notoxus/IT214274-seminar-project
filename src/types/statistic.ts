@@ -21,20 +21,15 @@ export type QuizAttempt = {
 };
 
 export type PracticeReviewProgress = {
+  id: string;
   dueAtQuestionCount: number;
   gapIndex: number;
   active: boolean;
   completed: boolean;
-  // Answers given during the current practice session. Drives the progress bar:
-  // percent = sessionAnswers / (sessionAnswers + remaining new + pending retries).
   sessionAnswers: number;
-  // Number of missed questions already answered correctly after coming due.
   resolvedWrongCount: number;
-  // Extra questions still owed: +1 after a retry is answered correctly, +2 after
-  // a retry is missed. fillerDelay pushes them one question further out.
   pendingFillers: number;
   fillerDelay: number;
-  // Extra (supplemental) questions already used as fillers.
   extraServedIds: string[];
   firstPassQuestionIds: string[];
   firstPassCorrectIds: string[];
@@ -53,6 +48,7 @@ export type PracticeReviewProgress = {
 };
 
 export type LearningProgress = {
+  id: string;
   completedLessonIds: string[];
   completedQuizzes: number;
   correctAnswers: number;
@@ -62,13 +58,9 @@ export type LearningProgress = {
   wrongAnswers?: WrongAnswerRecord[];
   practiceReviews?: Record<string, PracticeReviewProgress>;
   practiceQuestionAnswers?: number;
-  // Vocabulary ids marked with the heart on the Learn flashcard. Word review
-  // can switch to a favourites-only queue from these ids.
   favoriteWordIds?: string[];
   totalStars?: number;
   streakDays: number;
   lastActiveDate?: string;
-  // Milliseconds since epoch of the last local/cloud write. Used to decide
-  // which copy wins when merging a device with its Firestore backup.
   updatedAt?: number;
 };
