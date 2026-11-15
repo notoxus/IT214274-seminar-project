@@ -6,6 +6,7 @@ import { AppButton } from '@/components/ui/app-button';
 import { Colors, Spacing } from '@/constants/constants';
 import { useAuth } from '@/hooks/use-auth';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { authErrorMessage } from '@/services/auth-error';
 
 export function AuthForm({ mode }: { mode: 'login' | 'register' }) {
   const { signIn, register } = useAuth();
@@ -24,7 +25,7 @@ export function AuthForm({ mode }: { mode: 'login' | 'register' }) {
       if (mode === 'login') await signIn({ email, password });
       else await register({ email, password }, name);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not complete your request.');
+      setError(authErrorMessage(reason));
     } finally {
       setBusy(false);
     }
@@ -34,7 +35,7 @@ export function AuthForm({ mode }: { mode: 'login' | 'register' }) {
     {mode === 'register' && <TextInput accessibilityLabel="Name" autoCapitalize="words" placeholder="Your name" placeholderTextColor={palette.muted} value={name} onChangeText={setName} style={[styles.input, { color: palette.text, borderColor: palette.border }]} />}
     <TextInput accessibilityLabel="Email" autoCapitalize="none" autoComplete="email" keyboardType="email-address" placeholder="Email address" placeholderTextColor={palette.muted} value={email} onChangeText={setEmail} style={[styles.input, { color: palette.text, borderColor: palette.border }]} />
     <TextInput accessibilityLabel="Password" autoCapitalize="none" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} secureTextEntry placeholder="Password" placeholderTextColor={palette.muted} value={password} onChangeText={setPassword} style={[styles.input, { color: palette.text, borderColor: palette.border }]} />
-    {!!error && <Text accessibilityRole="alert" style={{ color: '#C43F45' }}>{error}</Text>}
+    {!!error && <Text accessibilityRole="alert" style={{ color: palette.danger }}>{error}</Text>}
     {busy ? (
       <View accessibilityLiveRegion="polite" style={styles.busy}>
         <ActivityIndicator color={palette.primary} />

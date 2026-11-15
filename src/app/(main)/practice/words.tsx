@@ -233,19 +233,13 @@ export default function LearnedWordsScreen() {
           </ThemedText>
 
           <View style={styles.deck}>
-            <Pressable
-              accessibilityRole="button"
+            <FlashcardIconButton
+              icon={favoriteMode ? 'heart' : 'heart-outline'}
+              active={favoriteMode}
               accessibilityLabel={favoriteMode ? 'Review all learned words' : 'Review favorite words only'}
-              hitSlop={8}
               onPress={toggleFavoriteMode}
-              style={[styles.favoriteToggle, favoriteMode && styles.favoriteToggleActive]}
-            >
-              <Ionicons
-                name={favoriteMode ? 'heart' : 'heart-outline'}
-                size={20}
-                color={favoriteMode ? '#EF4444' : '#0F172A'}
-              />
-            </Pressable>
+              style={styles.favoriteToggle}
+            />
             <Animated.View
               style={[
                 styles.cardWrap,
@@ -319,18 +313,9 @@ const styles = StyleSheet.create({
   favoriteToggle: {
     position: 'absolute',
     top: 0,
-    right: 4,
+    right: 6,
     zIndex: 10,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1,
-    borderColor: 'rgba(15, 23, 42, 0.1)',
   },
-  favoriteToggleActive: { backgroundColor: '#FEE2E2', borderColor: '#FCA5A5' },
   cardWrap: { position: 'relative' },
   badge: {
     position: 'absolute',

@@ -133,13 +133,11 @@ export default function PracticeScreen() {
       if (pool.length === 0) return null;
       return { question: pool[current.fillerCursor % pool.length]!, isExtra: false };
     };
-
     // Priority 1: Filler questions.
     if (review.pendingFillers > 0 && review.fillerDelay <= 0) {
       const filler = pickFiller(review);
       if (filler) return { question: filler.question, mode: 'filler', isExtra: filler.isExtra };
     }
-
     // Priority 2: Retry - a missed question that has come due comes back before the
     // next unseen question.
     const nextRetryId = review.retryBatchQuestionIds[0];
@@ -147,7 +145,6 @@ export default function PracticeScreen() {
       const nextRetry = allQuestions.find((item) => item.id === nextRetryId);
       if (nextRetry) return { question: nextRetry, mode: 'retry', isExtra: false };
     }
-
     // Priority 3: First Pass - the next unseen lesson question, in shuffled order
     const nextFirstPassId = lessonOrder.find((id) => !review.firstPassQuestionIds.includes(id));
     if (nextFirstPassId) {

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { AppButton } from '@/components/ui/app-button';
@@ -28,21 +28,23 @@ export function Flashcard({
 }) {
   const theme = useTheme();
 
+  const header = label ? (
+    <ThemedText themeColor="muted" style={styles.label}>
+      {label}
+    </ThemedText>
+  ) : null;
+
   if (face === 'meaning') {
     return (
       <View style={[styles.stage, styles.meaningStage, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-        {label ? (
-          <ThemedText themeColor="muted" style={styles.label}>
-            {label}
-          </ThemedText>
-        ) : null}
+        {header}
         <ThemedText themeColor="muted" style={[styles.label, styles.meaningLabel]}>
           NGHĨA TIẾNG VIỆT
         </ThemedText>
         <ThemedText themeColor="text" style={styles.meaning}>
           {word.meaning}
         </ThemedText>
-        {hint ? <Text style={styles.hint}>{hint}</Text> : null}
+        {hint ? <ThemedText themeColor="muted" style={styles.hint}>{hint}</ThemedText> : null}
         {children}
       </View>
     );
@@ -50,15 +52,11 @@ export function Flashcard({
 
   return (
     <View style={[styles.stage, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-      {label ? (
-        <ThemedText themeColor="muted" style={styles.label}>
-          {label}
-        </ThemedText>
-      ) : null}
+      {header}
       <ThemedText themeColor="text" style={styles.word}>
         {word.word}
       </ThemedText>
-      <Text style={styles.pronunciation}>{word.pronunciation}</Text>
+      <Text style={[styles.pronunciation, { color: theme.primary }]}>{word.pronunciation}</Text>
 
       <View style={[styles.divider, { backgroundColor: theme.border }]} />
 
@@ -79,25 +77,40 @@ export function Flashcard({
 }
 
 // Round white icon button used for speaker / favourite actions on the card.
+// `active` is for toggle buttons such as the heart.
 export function FlashcardIconButton({
   icon,
-  color = '#0F172A',
+  color,
+  active = false,
   onPress,
   accessibilityLabel,
+  style,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   color?: string;
+  active?: boolean;
   onPress: () => void;
   accessibilityLabel?: string;
+  style?: StyleProp<ViewStyle>;
 }) {
+  const theme = useTheme();
+  const iconColor = color ?? (active ? theme.danger : theme.text);
+
   return (
     <TouchableOpacity
-      style={styles.circleBtn}
+      style={[
+        styles.circleBtn,
+        {
+          backgroundColor: active ? theme.dangerSoft : theme.subtle,
+          borderColor: active ? theme.danger : theme.border,
+        },
+        style,
+      ]}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       onPress={onPress}
     >
-      <Ionicons name={icon} size={18} color={color} />
+      <Ionicons name={icon} size={18} color={iconColor} />
     </TouchableOpacity>
   );
 }
@@ -116,15 +129,20 @@ export function FlashcardButtons({
   nextLabel?: string;
   onNext?: () => void;
 }) {
+  const theme = useTheme();
+
   return (
     <View style={styles.buttons}>
-      <TouchableOpacity style={styles.knownBtn} onPress={onKnown}>
-        <Ionicons name={knownIcon} size={20} color="#0F172A" />
-        <Text style={styles.knownBtnText}>{knownLabel}</Text>
+      <TouchableOpacity
+        style={[styles.knownBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}
+        onPress={onKnown}
+      >
+        <Ionicons name={knownIcon} size={20} color={theme.text} />
+        <Text style={[styles.knownBtnText, { color: theme.text }]}>{knownLabel}</Text>
       </TouchableOpacity>
       {nextLabel && onNext ? (
-        <TouchableOpacity style={styles.nextBtn} onPress={onNext}>
-          <Text style={styles.nextBtnText}>{nextLabel}</Text>
+        <TouchableOpacity style={[styles.nextBtn, { backgroundColor: theme.warning }]} onPress={onNext}>
+          <Text style={[styles.nextBtnText, { color: theme.onAccent }]}>{nextLabel}</Text>
         </TouchableOpacity>
       ) : null}
     </View>
@@ -147,7 +165,6 @@ const styles = StyleSheet.create({
   },
   hint: {
     fontSize: 13,
-    color: '#94A3B8',
     marginTop: 18,
   },
   label: {
@@ -163,7 +180,6 @@ const styles = StyleSheet.create({
   },
   pronunciation: {
     fontSize: 15,
-    color: '#5EEAD4',
     marginTop: 2,
   },
   divider: {
@@ -180,7 +196,7 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -192,7 +208,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
     paddingVertical: 12,
     borderRadius: 10,
     gap: 6,
@@ -200,18 +216,15 @@ const styles = StyleSheet.create({
   knownBtnText: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#0F172A',
   },
   nextBtn: {
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FACC15',
     paddingVertical: 13,
     borderRadius: 10,
   },
   nextBtnText: {
     fontSize: 15,
     fontWeight: '800',
-    color: '#0F172A',
   },
 });

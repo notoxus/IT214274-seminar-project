@@ -18,6 +18,7 @@ import { PronunciationMic } from '@/components/learn/pronunciation-mic';
 import { GrammarPoint } from '@/components/learn/grammar-point';
 import { Screen } from '@/components/ui/screen';
 import { ThemedText } from '@/components/ui/themed-text';
+import { useTheme } from '@/hooks/use-theme';
 import { getProgress, markLessonComplete, toggleFavoriteWord } from '@/services/storage-service';
 import { speakEnglishWord } from '@/services/speech-service';
 import {
@@ -37,6 +38,7 @@ function createVocabularyId() {
 export default function LessonScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const theme = useTheme();
   const lesson = getLesson(id);
 
   // Lesson completion state (kept from the original project logic)
@@ -74,7 +76,7 @@ export default function LessonScreen() {
     return (
       <Screen>
         <ThemedText type="title">Lesson not found</ThemedText>
-        <Link href="/(main)/learn" style={{ color: '#5EEAD4', marginTop: 12 }}>
+        <Link href="/(main)/learn" style={{ color: theme.primary, marginTop: 12 }}>
           Back to lessons
         </Link>
       </Screen>
@@ -86,6 +88,9 @@ export default function LessonScreen() {
   const progressPercent =
     vocabList.length > 0 ? ((currentIndex + 1) / vocabList.length) * 100 : 0;
   const isFavorite = currentVocab ? favoriteIds.includes(currentVocab.id) : false;
+
+  // The add-content form inputs share one themed style.
+  const inputStyle = [styles.input, { backgroundColor: theme.background, borderColor: theme.border, color: theme.text }];
 
   const handleToggleFavorite = async () => {
     if (!currentVocab) return;
@@ -161,17 +166,17 @@ export default function LessonScreen() {
   return (
     <Screen>
       {/* TITLE BAR & PROGRESS, MEMRISE STYLE */}
-      <View style={styles.memriseHeader}>
+      <View style={[styles.memriseHeader, { backgroundColor: theme.accent }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.headerIconBtn}>
-          <Ionicons name="close" size={24} color="#0F172A" />
+          <Ionicons name="close" size={24} color={theme.onAccent} />
         </TouchableOpacity>
 
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle} numberOfLines={1}>
+          <Text style={[styles.headerTitle, { color: theme.onAccent }]} numberOfLines={1}>
             {lesson.title}
           </Text>
           <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: `${progressPercent}%` }]} />
+            <View style={[styles.progressFill, { width: `${progressPercent}%`, backgroundColor: theme.onAccent }]} />
           </View>
         </View>
 
@@ -180,7 +185,7 @@ export default function LessonScreen() {
           onPress={() => setModalVisible(true)}
           style={styles.headerIconBtn}
         >
-          <Ionicons name="add-circle" size={26} color="#0F172A" />
+          <Ionicons name="add-circle" size={26} color={theme.onAccent} />
         </TouchableOpacity>
       </View>
 
@@ -204,12 +209,12 @@ export default function LessonScreen() {
               />
               <FlashcardIconButton
                 icon={isFavorite ? 'heart' : 'heart-outline'}
-                color={isFavorite ? '#EF4444' : '#0F172A'}
+                active={isFavorite}
                 onPress={() => void handleToggleFavorite()}
               />
             </View>
 
-            <PronunciationMic word={currentVocab.word} size={48} buttonStyle={styles.micBtn} />
+            <PronunciationMic word={currentVocab.word} size={48} buttonStyle={[styles.micBtn, { backgroundColor: theme.warning }]} />
           </View>
 
           {/* The two navigation buttons that are characteristic of Memrise */}
@@ -226,7 +231,7 @@ export default function LessonScreen() {
       <View style={styles.sectionHeaderRow}>
         <ThemedText type="subtitle">Vocabulary ({lesson.vocabulary.length})</ThemedText>
         <TouchableOpacity onPress={() => { setAddType('vocab'); setModalVisible(true); }}>
-          <Text style={styles.addLinkText}>+ Thêm từ</Text>
+          <Text style={[styles.addLinkText, { color: theme.primary }]}>+ Thêm từ</Text>
         </TouchableOpacity>
       </View>
 
@@ -240,7 +245,7 @@ export default function LessonScreen() {
           Grammar ({lesson.grammar?.length || 0})
         </ThemedText>
         <TouchableOpacity onPress={() => { setAddType('grammar'); setModalVisible(true); }}>
-          <Text style={styles.addLinkText}>+ Thêm ngữ pháp</Text>
+          <Text style={[styles.addLinkText, { color: theme.primary }]}>+ Thêm ngữ pháp</Text>
         </TouchableOpacity>
       </View>
 
@@ -278,30 +283,30 @@ export default function LessonScreen() {
         onRequestClose={() => setModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalBox}>
+          <View style={[styles.modalBox, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             <View style={styles.modalTop}>
-              <Text style={styles.modalTitle}>Viết thêm nội dung bài học</Text>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>Viết thêm nội dung bài học</Text>
               <TouchableOpacity onPress={() => setModalVisible(false)}>
-                <Ionicons name="close" size={24} color="#94A3B8" />
+                <Ionicons name="close" size={24} color={theme.muted} />
               </TouchableOpacity>
             </View>
 
             {/* Tabs that switch between adding vocabulary and grammar */}
-            <View style={styles.tabSwitch}>
+            <View style={[styles.tabSwitch, { backgroundColor: theme.subtle }]}>
               <TouchableOpacity
-                style={[styles.tabBtn, addType === 'vocab' && styles.tabBtnActive]}
+                style={[styles.tabBtn, { backgroundColor: addType === 'vocab' ? theme.surface : 'transparent', borderColor: addType === 'vocab' ? theme.border : 'transparent' }]}
                 onPress={() => setAddType('vocab')}
               >
-                <Text style={[styles.tabText, addType === 'vocab' && styles.tabTextActive]}>
+                <Text style={[styles.tabText, { color: addType === 'vocab' ? theme.primary : theme.muted }]}>
                   Từ vựng mới
                 </Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.tabBtn, addType === 'grammar' && styles.tabBtnActive]}
+                style={[styles.tabBtn, { backgroundColor: addType === 'grammar' ? theme.surface : 'transparent', borderColor: addType === 'grammar' ? theme.border : 'transparent' }]}
                 onPress={() => setAddType('grammar')}
               >
-                <Text style={[styles.tabText, addType === 'grammar' && styles.tabTextActive]}>
+                <Text style={[styles.tabText, { color: addType === 'grammar' ? theme.primary : theme.muted }]}>
                   Ngữ pháp mới
                 </Text>
               </TouchableOpacity>
@@ -311,23 +316,23 @@ export default function LessonScreen() {
             {addType === 'vocab' ? (
               <>
                 <TextInput
-                  style={styles.input}
+                  style={inputStyle}
                   placeholder="Từ tiếng Anh (vd: let's go!)"
-                  placeholderTextColor="#64748B"
+                  placeholderTextColor={theme.muted}
                   value={word}
                   onChangeText={setWord}
                 />
                 <TextInput
-                  style={styles.input}
+                  style={inputStyle}
                   placeholder="Phiên âm (vd: /lets ɡoʊ/)"
-                  placeholderTextColor="#64748B"
+                  placeholderTextColor={theme.muted}
                   value={pronunciation}
                   onChangeText={setPronunciation}
                 />
                 <TextInput
-                  style={styles.input}
+                  style={inputStyle}
                   placeholder="Nghĩa tiếng Việt (vd: đi thôi!)"
-                  placeholderTextColor="#64748B"
+                  placeholderTextColor={theme.muted}
                   value={meaning}
                   onChangeText={setMeaning}
                 />
@@ -335,23 +340,23 @@ export default function LessonScreen() {
             ) : (
               <>
                 <TextInput
-                  style={styles.input}
+                  style={inputStyle}
                   placeholder="Tiêu đề cấu trúc (vd: S + usually + V)"
-                  placeholderTextColor="#64748B"
+                  placeholderTextColor={theme.muted}
                   value={grammarTitle}
                   onChangeText={setGrammarTitle}
                 />
                 <TextInput
-                  style={styles.input}
+                  style={inputStyle}
                   placeholder="Giải thích cách dùng"
-                  placeholderTextColor="#64748B"
+                  placeholderTextColor={theme.muted}
                   value={grammarExplanation}
                   onChangeText={setGrammarExplanation}
                 />
                 <TextInput
-                  style={styles.input}
+                  style={inputStyle}
                   placeholder="Câu ví dụ minh họa"
-                  placeholderTextColor="#64748B"
+                  placeholderTextColor={theme.muted}
                   value={grammarExample}
                   onChangeText={setGrammarExample}
                 />
@@ -359,9 +364,7 @@ export default function LessonScreen() {
             )}
 
             {/* Save button */}
-            <TouchableOpacity style={styles.saveBtn} onPress={() => void handleSaveNewContent()}>
-              <Text style={styles.saveBtnText}>Lưu vào bài học</Text>
-            </TouchableOpacity>
+            <AppButton title="Lưu vào bài học" onPress={() => void handleSaveNewContent()} />
           </View>
         </View>
       </Modal>
@@ -373,7 +376,6 @@ const styles = StyleSheet.create({
   memriseHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#5EEAD4',
     padding: 12,
     borderRadius: 12,
     marginTop: 8,
@@ -388,7 +390,6 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#0F172A',
     marginBottom: 6,
   },
   progressTrack: {
@@ -399,7 +400,6 @@ const styles = StyleSheet.create({
   },
   progressFill: {
     height: '100%',
-    backgroundColor: '#0F172A',
   },
   descriptionText: {
     fontSize: 14,
@@ -420,7 +420,6 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#FACC15',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -432,7 +431,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   addLinkText: {
-    color: '#5EEAD4',
     fontWeight: '700',
     fontSize: 14,
   },
@@ -446,7 +444,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalBox: {
-    backgroundColor: '#1E293B',
+    borderTopWidth: 1,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: 20,
@@ -460,11 +458,9 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#F8FAFC',
   },
   tabSwitch: {
     flexDirection: 'row',
-    backgroundColor: '#0F172A',
     borderRadius: 10,
     padding: 4,
   },
@@ -473,37 +469,16 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     alignItems: 'center',
     borderRadius: 8,
-  },
-  tabBtnActive: {
-    backgroundColor: '#334155',
+    borderWidth: 1,
   },
   tabText: {
-    color: '#94A3B8',
     fontWeight: '600',
   },
-  tabTextActive: {
-    color: '#5EEAD4',
-  },
   input: {
-    backgroundColor: '#0F172A',
     borderWidth: 1,
-    borderColor: '#334155',
     borderRadius: 10,
     padding: 12,
-    color: '#F8FAFC',
     fontSize: 15,
-  },
-  saveBtn: {
-    backgroundColor: '#5EEAD4',
-    paddingVertical: 13,
-    borderRadius: 10,
-    alignItems: 'center',
-    marginTop: 6,
-  },
-  saveBtnText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#0F172A',
   },
 });
 

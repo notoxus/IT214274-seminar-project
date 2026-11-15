@@ -1,7 +1,7 @@
 import { Pressable, StyleSheet, Text } from 'react-native';
 
-import { Colors, Spacing } from '@/constants/constants';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { Spacing } from '@/constants/constants';
+import { useTheme } from '@/hooks/use-theme';
 
 export function AppButton({ 
   title, 
@@ -14,9 +14,11 @@ export function AppButton({
   disabled?: boolean;
   color?: string;
 }) {
-  const scheme = useColorScheme();
-  const themeColors = Colors[scheme === 'dark' ? 'dark' : 'light']; 
-  
+  const theme = useTheme();
+  // A caller-supplied background is assumed to be dark, so keep white ink for
+  // it; the theme primary flips to a light blue in dark mode and needs dark ink.
+  const textColor = color ? '#FFFFFF' : theme.onPrimary;
+
   return (
     <Pressable 
       accessibilityRole="button" 
@@ -25,14 +27,14 @@ export function AppButton({
       style={({ pressed }) => [
         styles.button, 
         // Priority input color
-        { backgroundColor: color ? color : themeColors.primary }, 
+        { backgroundColor: color ? color : theme.primary }, 
         pressed && styles.pressed, 
         disabled && styles.disabled
       ]}
     >
-      <Text style={styles.text}>{title}</Text>
+      <Text style={[styles.text, { color: textColor }]}>{title}</Text>
     </Pressable>
   );
 }
 
-const styles = StyleSheet.create({ button: { minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 14, paddingHorizontal: Spacing.four }, text: { color: '#FFFFFF', fontWeight: '700', fontSize: 16 }, pressed: { opacity: 0.82 }, disabled: { opacity: 0.5 } });
+const styles = StyleSheet.create({ button: { minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 14, paddingHorizontal: Spacing.four }, text: { fontWeight: '700', fontSize: 16 }, pressed: { opacity: 0.82 }, disabled: { opacity: 0.5 } });
