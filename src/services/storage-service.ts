@@ -156,15 +156,42 @@ export async function saveProgress(progress: LearningProgress) {
   }
 }
 // Add or remove a vocabulary word from the hearted favourites set used by the
-// Practice word review. Returns the updated id list.
+// Practice word review. Re-hearting a word also clears its "remembered" mark so
+// the word returns to the review queue. Returns both updated id lists.
 export async function toggleFavoriteWord(wordId: string) {
   const progress = await getProgress();
   const favorites = new Set(progress.favoriteWordIds ?? []);
-  if (favorites.has(wordId)) favorites.delete(wordId);
-  else favorites.add(wordId);
+  const remembered = new Set(progress.wordReviewRememberedIds ?? []);
+  if (favorites.has(wordId)) {
+    favorites.delete(wordId);
+  } else {
+    favorites.add(wordId);
+    remembered.delete(wordId);
+  }
   progress.favoriteWordIds = [...favorites];
+  progress.wordReviewRememberedIds = [...remembered];
   await saveProgress(progress);
-  return progress.favoriteWordIds;
+  return {
+    favoriteWordIds: progress.favoriteWordIds,
+    rememberedIds: progress.wordReviewRememberedIds,
+  };
+}
+
+// A finished review session marks every card it showed as remembered, except
+// the ones the learner sent back with "Chưa nhớ" at least once. Those keep (or
+// regain) their place in the "Play not remembered" deck for the next session.
+export async function recordWordReviewSession(sessionWordIds: string[], missedWordIds: string[]) {
+  const progress = await getProgress();
+  const missed = new Set(missedWordIds);
+  const remembered = new Set(progress.wordReviewRememberedIds ?? []);
+  for (const id of sessionWordIds) {
+    if (missed.has(id)) remembered.delete(id);
+    else remembered.add(id);
+  }
+  progress.wordReviewRememberedIds = [...remembered];
+  progress.wordReviewSessions = (progress.wordReviewSessions ?? 0) + 1;
+  await saveProgress(progress);
+  return progress.wordReviewRememberedIds;
 }
 
 // Update streak based on today's date vs last active date (mutates progress in-place)

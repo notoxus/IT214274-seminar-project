@@ -18,7 +18,7 @@ import { Screen } from '@/components/ui/screen';
 import { ThemedText } from '@/components/ui/themed-text';
 import { useTheme } from '@/hooks/use-theme';
 import { getLessons } from '@/services/lesson-service';
-import { getProgress } from '@/services/storage-service';
+import { getProgress, recordWordReviewSession } from '@/services/storage-service';
 import { speakEnglishWord } from '@/services/speech-service';
 import type { Vocabulary } from '@/types/lesson';
 
@@ -34,13 +34,20 @@ export default function LearnedWordsScreen() {
 
   const [allWords, setAllWords] = useState<LearnedWord[]>([]);
   const [favoriteWords, setFavoriteWords] = useState<LearnedWord[]>([]);
+  const [rememberedIds, setRememberedIds] = useState<string[]>([]);
   const [favoriteMode, setFavoriteMode] = useState(false);
   const [sessionWords, setSessionWords] = useState<LearnedWord[]>([]);
   const [deck, setDeck] = useState<LearnedWord[]>([]);
   const [remembered, setRemembered] = useState(0);
-  const [finished, setFinished] = useState(false);
+  // Menu → session → menu. `justCompleted` only changes the menu wording.
+  const [sessionActive, setSessionActive] = useState(false);
+  const [justCompleted, setJustCompleted] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [showBack, setShowBack] = useState(false);
+  const [showBack, setShowBack] = useState(false);  // Words that were sent back with "Chưa nhớ" during the current session.
+  const [missedIds, setMissedIds] = useState<string[]>([]);
+  // Cards swiped right without being missed in this session: their favourites
+  // count drops straight away, matching what will be persisted on completion.
+  const [sessionCleanIds, setSessionCleanIds] = useState<string[]>([]);
 
   const [flipValue] = useState(() => new Animated.Value(0));
   const [position] = useState(() => new Animated.ValueXY());
@@ -68,14 +75,18 @@ export default function LearnedWordsScreen() {
         .filter((item) => ids.includes(item.word.id));
       setAllWords(learnedWords);
       setFavoriteWords(hearted);
-      // With no completed lesson yet, start directly on the favourites deck so
-      // hearted words are still reviewable.
-      const startOnFavorites = learnedWords.length === 0 && hearted.length > 0;
-      setFavoriteMode(startOnFavorites);
-      setSessionWords(startOnFavorites ? hearted : learnedWords);
-      setDeck(startOnFavorites ? hearted : learnedWords);
+      setRememberedIds(progress.wordReviewRememberedIds ?? []);
+      // First run: jump straight into the full deck so the feature shows what
+      // it does before asking the learner to choose a deck.
+      const firstRun = (progress.wordReviewSessions ?? 0) === 0 && learnedWords.length > 0;
+      setFavoriteMode(false);
+      setSessionWords(firstRun ? learnedWords : []);
+      setDeck(firstRun ? learnedWords : []);
       setRemembered(0);
-      setFinished(false);
+      setSessionActive(firstRun);
+      setJustCompleted(false);
+      setMissedIds([]);
+      setSessionCleanIds([]);
       resetCard();
       setLoading(false);
     });
@@ -83,42 +94,68 @@ export default function LearnedWordsScreen() {
   }, [resetCard]));
 
   const current = deck[0];
+  const notRememberedWords = allWords.filter((item) => !rememberedIds.includes(item.word.id));
+  const rememberedCount = allWords.length - notRememberedWords.length;
+  const unrememberedFavorites = favoriteWords.filter((item) => !rememberedIds.includes(item.word.id));
+  const favoriteRemainingCount = unrememberedFavorites.filter((item) => !sessionCleanIds.includes(item.word.id)).length;
 
-  // Right swipe removes the word from the queue; left swipe sends it to the
+  // A right swipe removes the word from the queue; a left swipe sends it to the
   // back so another card comes up and the word returns later. The session ends
-  // only when every word has been remembered at least once.
+  // only when every card has been swiped right at least once.
   const advance = (wasRemembered: boolean) => {
     if (!current) return;
     if (wasRemembered) {
       const rest = deck.slice(1);
       setDeck(rest);
       setRemembered((value) => value + 1);
-      if (rest.length === 0) setFinished(true);
-    } else if (deck.length > 1) {
-      setDeck([...deck.slice(1), current]);
+      if (!missedIds.includes(current.word.id)) {
+        setSessionCleanIds((prev) => (prev.includes(current.word.id) ? prev : [...prev, current.word.id]));
+      }
+      if (rest.length === 0) void completeSession();
+    } else {
+      setMissedIds((prev) => (prev.includes(current.word.id) ? prev : [...prev, current.word.id]));
+      if (deck.length > 1) setDeck([...deck.slice(1), current]);
     }
     resetCard();
   };
 
-  const replay = () => {
-    setDeck(sessionWords);
+  // Finishing a session persists mastery: a word that was never sent back is
+  // "remembered", so it drops out of Play not remembered next time. A word that
+  // was missed stays (or goes back) in the not-remembered deck.
+  const completeSession = async () => {
+    const sessionIds = sessionWords.map((item) => item.word.id);
+    try {
+      const next = await recordWordReviewSession(sessionIds, missedIds);
+      setRememberedIds(next);
+    } catch {
+      // The session still ends; the state will be retried next time.
+    }
+    setSessionActive(false);
+    setJustCompleted(true);
+    setFavoriteMode(false);
+    setDeck([]);
     setRemembered(0);
-    setFinished(false);
+    setMissedIds([]);
+    setSessionCleanIds([]);
     resetCard();
   };
 
-  // The heart switches the deck between every learned word and the words
-  // hearted on the Learn flashcard.
-  const toggleFavoriteMode = () => {
-    const nextMode = !favoriteMode;
-    const source = nextMode ? favoriteWords : allWords;
-    setFavoriteMode(nextMode);
+  const startSession = (source: LearnedWord[], favorites: boolean) => {
+    setMissedIds([]);
+    setSessionCleanIds([]);
+    setFavoriteMode(favorites);
     setSessionWords(source);
     setDeck(source);
     setRemembered(0);
-    setFinished(false);
+    setSessionActive(true);
+    setJustCompleted(false);
     resetCard();
   };
+
+  const startAll = () => startSession(allWords, false);
+  const startNotRemembered = () => startSession(notRememberedWords, false);
+  const startFavorites = () => startSession(unrememberedFavorites, true);
+  const replayAllFavorites = () => startSession(favoriteWords, true);
 
   // Turns the card edge-on, swaps the face at 90deg, then finishes the flip so
   // the back is never shown mirrored.
@@ -194,10 +231,53 @@ export default function LearnedWordsScreen() {
         <Pressable accessibilityRole="button" accessibilityLabel="Back to Practice" hitSlop={10} onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={23} color={theme.text} />
         </Pressable>
-        <ThemedText type="title" style={styles.title}>Word review</ThemedText>
+        <ThemedText type="title" style={styles.title} numberOfLines={1}>Word review</ThemedText>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={
+            favoriteMode
+              ? 'Show all learned words'
+              : `Review ${favoriteRemainingCount} favorite word${favoriteRemainingCount === 1 ? '' : 's'} left`
+          }
+          onPress={favoriteMode ? startAll : startFavorites}
+          hitSlop={8}
+          style={({ pressed }) => [
+            styles.favoritePill,
+            {
+              backgroundColor: favoriteMode ? theme.dangerSoft : theme.subtle,
+              borderColor: favoriteMode ? theme.danger : theme.border,
+            },
+            pressed && styles.favoritePillPressed,
+          ]}
+        >
+          <Ionicons
+            name={favoriteMode ? 'heart' : 'heart-outline'}
+            size={17}
+            color={favoriteMode ? theme.danger : theme.muted}
+          />
+          <Text style={[styles.favoritePillText, { color: favoriteMode ? theme.danger : theme.text }]}>
+            {favoriteRemainingCount}
+          </Text>
+        </Pressable>
       </View>
 
-      {loading ? null : !favoriteMode && sessionWords.length === 0 ? (
+      {loading ? null : favoriteMode && sessionWords.length === 0 ? (
+        <AppCard>
+          <ThemedText type="subtitle">
+            {favoriteWords.length === 0 ? 'No favorite words yet' : 'All favorite words remembered'}
+          </ThemedText>
+          <ThemedText type="default" themeColor="muted">
+            {favoriteWords.length === 0
+              ? 'Tap the heart on a Learn flashcard, then come back here to review your favorites.'
+              : `You remembered all ${favoriteWords.length} favorite word(s). You can play the whole set again any time.`}
+          </ThemedText>
+          {favoriteWords.length > 0 ? (
+            <AppButton title="Play all favorites" onPress={replayAllFavorites} />
+          ) : allWords.length > 0 ? (
+            <AppButton title="Review all words" onPress={startAll} />
+          ) : null}
+        </AppCard>
+      ) : allWords.length === 0 && !sessionActive ? (
         <AppCard>
           <ThemedText type="subtitle">No learned words yet</ThemedText>
           {favoriteWords.length > 0 ? (
@@ -205,26 +285,32 @@ export default function LearnedWordsScreen() {
               <ThemedText type="default" themeColor="muted">
                 Complete a lesson in Learn, or review the {favoriteWords.length} word(s) you hearted.
               </ThemedText>
-              <AppButton title="Review favorites" onPress={toggleFavoriteMode} />
+              <AppButton title="Review favorites" onPress={startFavorites} />
             </>
           ) : (
             <ThemedText type="default" themeColor="muted">Complete a lesson in Learn to add its vocabulary cards here.</ThemedText>
           )}
         </AppCard>
-      ) : favoriteMode && sessionWords.length === 0 ? (
+      ) : !sessionActive ? (
         <AppCard>
-          <ThemedText type="subtitle">No favorite words yet</ThemedText>
-          <ThemedText type="default" themeColor="muted">Tap the heart on a Learn flashcard, then come back here to review your favorites.</ThemedText>
-          <AppButton title="Review all words" onPress={toggleFavoriteMode} />
-        </AppCard>
-      ) : finished ? (
-        <AppCard>
-          <ThemedText type="subtitle">Review complete</ThemedText>
+          <ThemedText type="subtitle">{justCompleted ? 'Review complete' : 'Ready to review'}</ThemedText>
           <ThemedText type="default" themeColor="muted">
-            {favoriteMode ? 'You remembered all favorite words' : `You remembered all ${sessionWords.length} word(s)`}.
+            {justCompleted
+              ? `You finished a session of ${sessionWords.length} word(s).`
+              : `${rememberedCount} / ${allWords.length} word(s) marked as remembered.`}
           </ThemedText>
-          <AppButton title="Replay" onPress={replay} />
-          <AppButton title="Back to Practice" color="#334155" onPress={() => router.back()} />
+          <AppButton title={`Play again · ${allWords.length} word(s)`} onPress={startAll} />
+          <AppButton
+            title={`Play not remembered · ${notRememberedWords.length} word(s)`}
+            color="#B45309"
+            disabled={notRememberedWords.length === 0}
+            onPress={startNotRemembered}
+          />
+          {notRememberedWords.length === 0 && (
+            <ThemedText type="small" themeColor="muted">
+              Every learned word is marked as remembered. Learn a lesson or heart a word to add more cards.
+            </ThemedText>
+          )}
         </AppCard>
       ) : current ? (
         <>
@@ -233,13 +319,6 @@ export default function LearnedWordsScreen() {
           </ThemedText>
 
           <View style={styles.deck}>
-            <FlashcardIconButton
-              icon={favoriteMode ? 'heart' : 'heart-outline'}
-              active={favoriteMode}
-              accessibilityLabel={favoriteMode ? 'Review all learned words' : 'Review favorite words only'}
-              onPress={toggleFavoriteMode}
-              style={styles.favoriteToggle}
-            />
             <Animated.View
               style={[
                 styles.cardWrap,
@@ -306,16 +385,23 @@ export default function LearnedWordsScreen() {
 
 const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  backButton: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center' },
-  title: { marginTop: 15 },
+  backButton: { width: 42, height: 42, marginTop: 15, alignItems: 'center', justifyContent: 'center' },
+  title: { marginTop: 15, flexShrink: 1, fontSize: 26, lineHeight: 32, fontWeight: '700' },
+  favoritePill: {
+    marginLeft: 'auto',
+    marginTop: 15,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+  },
+  favoritePillPressed: { opacity: 0.7 },
+  favoritePillText: { fontSize: 14, fontWeight: '700' },
   meta: { marginTop: 10, marginBottom: 4 },
   deck: { marginTop: 10, marginBottom: 6, minHeight: 300, justifyContent: 'center' },
-  favoriteToggle: {
-    position: 'absolute',
-    top: 0,
-    right: 6,
-    zIndex: 10,
-  },
   cardWrap: { position: 'relative' },
   badge: {
     position: 'absolute',

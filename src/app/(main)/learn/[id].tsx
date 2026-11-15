@@ -1,5 +1,5 @@
-import { useLocalSearchParams, Link, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useFocusEffect, useLocalSearchParams, Link, useRouter } from 'expo-router';
+import { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -47,6 +47,7 @@ export default function LessonScreen() {
   // Memrise-style study card state
   const [currentIndex, setCurrentIndex] = useState(0);
   const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
+  const [rememberedIds, setRememberedIds] = useState<string[]>([]);
 
   // Forces a re-render right after vocabulary/grammar is added
   const [, setRefreshKey] = useState(0);
@@ -65,12 +66,18 @@ export default function LessonScreen() {
   const [grammarExplanation, setGrammarExplanation] = useState('');
   const [grammarExample, setGrammarExample] = useState('');
 
-  useEffect(() => {
+  // Refresh on focus: Practice may have marked a favourite as remembered while
+  // this screen stayed mounted in the tab stack.
+  useFocusEffect(useCallback(() => {
+    let active = true;
     void getProgress().then((progress) => {
+      if (!active) return;
       setDone(progress.completedLessonIds.includes(id));
       setFavoriteIds(progress.favoriteWordIds ?? []);
+      setRememberedIds(progress.wordReviewRememberedIds ?? []);
     });
-  }, [id]);
+    return () => { active = false; };
+  }, [id, setDone, setFavoriteIds, setRememberedIds]));
 
   if (!lesson) {
     return (
@@ -87,7 +94,11 @@ export default function LessonScreen() {
   const currentVocab = vocabList[currentIndex] || vocabList[0];
   const progressPercent =
     vocabList.length > 0 ? ((currentIndex + 1) / vocabList.length) * 100 : 0;
-  const isFavorite = currentVocab ? favoriteIds.includes(currentVocab.id) : false;
+  // A remembered word stays in the favourites data but shows as unselected:
+  // its review queue slot is what the heart represents.
+  const isFavorite = currentVocab
+    ? favoriteIds.includes(currentVocab.id) && !rememberedIds.includes(currentVocab.id)
+    : false;
 
   // The add-content form inputs share one themed style.
   const inputStyle = [styles.input, { backgroundColor: theme.background, borderColor: theme.border, color: theme.text }];
@@ -96,7 +107,8 @@ export default function LessonScreen() {
     if (!currentVocab) return;
     try {
       const next = await toggleFavoriteWord(currentVocab.id);
-      setFavoriteIds(next);
+      setFavoriteIds(next.favoriteWordIds);
+      setRememberedIds(next.rememberedIds);
     } catch {
       Alert.alert('Không lưu được', 'Không thể cập nhật từ yêu thích. Vui lòng thử lại.');
     }

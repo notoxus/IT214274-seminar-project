@@ -59,6 +59,10 @@ export type LearningProgress = {
   practiceReviews?: Record<string, PracticeReviewProgress>;
   practiceQuestionAnswers?: number;
   favoriteWordIds?: string[];
+  // Vocabulary cards that finished a review session without being sent back.
+  wordReviewRememberedIds?: string[];
+  // Number of finished word-review sessions; 0 means the feature is new.
+  wordReviewSessions?: number;
   totalStars?: number;
   streakDays: number;
   lastActiveDate?: string;
