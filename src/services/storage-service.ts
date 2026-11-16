@@ -1,26 +1,26 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { PROGRESS_STORAGE_KEY } from '@/constants/constants';
 import { loadCloudDocument, saveCloudDocument } from '@/services/firebase-sync';
 import { getSyncUserId } from '@/services/sync-session';
 import type { LearningProgress, PracticeReviewProgress, WrongAnswerRecord } from '@/types/statistic';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const CLOUD_PROGRESS_DOCUMENT = 'progress';
 
 function createEmptyProgress(): LearningProgress {
   return {
-  completedLessonIds: [],
-  completedQuizzes: 0,
-  correctAnswers: 0,
-  totalQuestions: 0,
-  averageScore: 0,
-  quizHistory: [],
-  wrongAnswers: [],
-  practiceReviews: {},
-  practiceQuestionAnswers: 0,
-  favoriteWordIds: [],
-  totalStars: 0,
-  streakDays: 0,
-  updatedAt: 0,
+    completedLessonIds: [],
+    completedQuizzes: 0,
+    correctAnswers: 0,
+    totalQuestions: 0,
+    averageScore: 0,
+    quizHistory: [],
+    wrongAnswers: [],
+    practiceReviews: {},
+    practiceQuestionAnswers: 0,
+    favoriteWordIds: [],
+    totalStars: 0,
+    streakDays: 0,
+    updatedAt: 0,
   };
 }
 

@@ -21,7 +21,6 @@ export type QuizAttempt = {
 };
 
 export type PracticeReviewProgress = {
-  id: string;
   dueAtQuestionCount: number;
   gapIndex: number;
   active: boolean;
@@ -48,7 +47,6 @@ export type PracticeReviewProgress = {
 };
 
 export type LearningProgress = {
-  id: string;
   completedLessonIds: string[];
   completedQuizzes: number;
   correctAnswers: number;
