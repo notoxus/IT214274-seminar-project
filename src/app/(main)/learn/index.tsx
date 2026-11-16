@@ -30,7 +30,7 @@ export default function LearnScreen() {
     <Screen>
       <View style={styles.topBar}>
         {/* App logo */}
-        <ThemedText style={styles.logoText}>LearningEnglish App</ThemedText>
+        <ThemedText style={styles.logoText}>Learning English App</ThemedText>
 
         {/* Streak */}
         <View
