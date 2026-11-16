@@ -16,37 +16,53 @@
 
 ```text
 LearningEnglishApp/
-├── assets/                           # App icons and splash artwork
+├── assets/
+│   ├── expo.icon/                    # Expo icon composer artwork
+│   └── images/                       # App icons and splash artwork
 ├── src/
 │   ├── app/                          # Expo Router screens
 │   │   ├── _layout.tsx               # Root layout
+│   │   ├── index.tsx                 # Redirects to login or main tabs
 │   │   ├── (auth)/                   # Login and registration flow
 │   │   │   ├── _layout.tsx
 │   │   │   ├── login.tsx
 │   │   │   └── register.tsx
-│   │   ├── (main)/                   # Learn, practice, stats, and profile tabs
-│   │   │   ├── _layout.tsx
-│   │   │   ├── index.tsx
-│   │   │   ├── learn/[id].tsx
-│   │   │   ├── practice/index.tsx
-│   │   │   ├── statistic/index.tsx
-│   │   │   └── profile/{index,edit}.tsx
-│   │   └── index.tsx                 # Redirects to login or main tabs
+│   │   └── (main)/                   # Learn, practice, progress, and profile tabs
+│   │       ├── _layout.tsx
+│   │       ├── learn/
+│   │       │   ├── _layout.tsx
+│   │       │   ├── index.tsx         # Lesson list
+│   │       │   └── [id].tsx          # Lesson detail
+│   │       ├── practice/
+│   │       │   ├── _layout.tsx
+│   │       │   ├── index.tsx
+│   │       │   └── words.tsx
+│   │       ├── statistic/
+│   │       │   └── index.tsx
+│   │       └── profile/
+│   │           ├── _layout.tsx
+│   │           ├── index.tsx
+│   │           └── edit.tsx
 │   ├── components/
-│   │   ├── ui/                       # Shared controls, tabs, and themed views
+│   │   ├── ui/                       # Buttons, cards, tabs, screen, and themed views
 │   │   ├── auth/                     # Auth form and profile card
-│   │   ├── learn/                    # Lesson, vocabulary, and grammar cards
-│   │   ├── practice/                 # Multiple choice and fill in the blank
+│   │   ├── learn/                    # Lesson, flashcard, vocabulary, grammar, pronunciation
+│   │   ├── practice/                 # Multiple choice, fill in the blank, true/false
 │   │   └── statistic/                # Progress chart and stat card
 │   ├── config/firebase.ts            # Firebase app and Auth initialization
+│   ├── constants/                    # App constants and formatters
 │   ├── context/auth-context.tsx      # Auth session and actions
 │   ├── hooks/                        # Auth, theme, and color scheme hooks
-│   ├── services/                     # Firebase auth, local progress, lesson data
-│   ├── types/                        # Auth, lesson, and quiz models
-│   └── constants/                    # Theme, app constants, and formatters
+│   ├── services/                     # Firebase auth/sync, lesson data, storage, speech
+│   ├── types/                        # Auth, lesson, quiz, and statistic models
+│   └── global.css                    # Global styles
 ├── docs/RELEASING.md                 # APK build, release and signing checklist
+├── .github/workflows/android-apk.yml # CI workflow that builds and attaches the APK
 ├── .env.example                      # Firebase environment variable names
-├── app.json
+├── app.json                          # Expo app configuration
+├── eas.json                          # EAS build profiles
+├── eslint.config.js
+├── firestore.rules                   # Firestore security rules
 ├── package.json
 ├── tsconfig.json
 └── README.md
